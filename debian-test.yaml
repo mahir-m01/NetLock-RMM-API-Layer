@@ -1,0 +1,16 @@
+images:
+  - location: "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-arm64.qcow2"
+    arch: "aarch64"
+
+cpus: 1
+memory: "1GiB"
+disk: "8GiB"
+
+mounts: []
+
+provision:
+  - mode: system
+    script: |
+      #!/bin/bash
+      apt-get update -y
+      apt-get install -y curl wget apt-transport-https ca-certificates unzip

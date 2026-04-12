@@ -1,0 +1,79 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: mysql-container
+    environment:
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD}"
+      MYSQL_DATABASE: "${MYSQL_DATABASE}"
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    networks:
+      netlock-network:
+        ipv4_address: 172.18.0.3
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    command:
+      - --default-authentication-plugin=mysql_native_password
+      - --skip-log-bin
+      - --innodb_buffer_pool_size=256M
+      - --innodb_log_file_size=64M
+      - --innodb_flush_log_at_trx_commit=2
+      - --max_connections=100
+
+  netlock-rmm-server:
+    image: nicomak101/netlock-rmm-server:latest
+    platform: linux/amd64
+    container_name: netlock-rmm-server
+    environment:
+      TZ: "${TZ}"
+    volumes:
+      - ./config/server/appsettings.json:/app/appsettings.json
+      - ./data/server/internal:/app/internal
+      - ./data/server/files:/app/www/private/files
+      - ./data/server/logs:/var/0x101 Cyber Security/NetLock RMM/Server/
+      - ./data/certificates:/app/certificates
+    ports:
+      - "7080:7080"
+      - "7082:7081"
+    networks:
+      netlock-network:
+        ipv4_address: 172.18.0.5
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  netlock-rmm-web-console:
+    image: nicomak101/netlock-rmm-web-console:latest
+    platform: linux/amd64
+    container_name: netlock-rmm-web-console
+    environment:
+      TZ: "${TZ}"
+    volumes:
+      - ./config/web_console/appsettings.json:/app/appsettings.json
+      - ./data/web_console/internal:/app/internal
+      - ./data/web_console/logs:/var/0x101 Cyber Security/NetLock RMM/Web Console/
+      - ./data/certificates:/app/certificates
+    ports:
+      - "8080:80"
+    networks:
+      netlock-network:
+        ipv4_address: 172.18.0.4
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+networks:
+  netlock-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.18.0.0/16
