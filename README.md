@@ -1,25 +1,74 @@
-# NetLock RMM — Local Development Setup
+# ControlIT
 
-Local Docker stack for NetLock RMM on **Apple Silicon (M-series)** using Colima.
+A unified endpoint management API layer built on top of NetLock RMM, Netbird, and Wazuh. Built for managed service providers who need a single dashboard across multiple client environments — instead of logging into three separate tools per client.
+
+This repo is the integration layer. It reads from NetLock's database, dispatches commands through its SignalR hub, and serves everything through a clean REST API to a Next.js dashboard.
+
+---
+
+## What it does
+
+- Lists and details all managed endpoints across all client tenants
+- Dispatches remote commands to endpoints in real time via NetLock's SignalR hub
+- Tracks every action in a mandatory audit log (DPDP Act 2023 compliance)
+- Maps each physical device across NetLock, Netbird, and Wazuh into one unified identity
+- Enforces tenant isolation server-side — every query is scoped to the requesting tenant
+
+Phase 1 covers NetLock RMM and Netbird. Wazuh SIEM integration is Phase 2.
+
+---
+
+## System Overview
+
+![UC1 — Control IT Overall Use Case Diagram](diagrams/uc1-overall.png)
 
 ---
 
 ## Stack
 
-| Container | Image | Port | Purpose |
-|---|---|---|---|
-| `mysql-container` | `mysql:8.0` | `3306` | Database (native arm64) |
-| `netlock-rmm-server` | `nicomak101/netlock-rmm-server` | `7080` (HTTP), `7082` (TCP relay) | Backend — all server roles |
-| `netlock-rmm-web-console` | `nicomak101/netlock-rmm-web-console` | `8080` | Blazor admin web UI |
-> The two NetLock images are **amd64-only**. They run under Rosetta 2 emulation via Colima's `--vz-rosetta` flag. MySQL runs natively on arm64.
->
-> **Note on relay port:** The relay is mapped to host port `7082` (not `7081`) because macOS SSH port forwarding holds `7081` on this machine. The container still listens internally on `7081`.
+| Layer | Technology |
+|---|---|
+| API runtime | ASP.NET Core 10 — Minimal APIs |
+| NetLock reads | Dapper + MySqlConnector |
+| ControlIT tables | EF Core + Pomelo |
+| Real-time commands | Microsoft.AspNetCore.SignalR.Client |
+| Dashboard | Next.js (TypeScript, App Router) |
+| Database | MySQL 8.0 (shared with NetLock) |
+| Reverse proxy | Caddy |
+| Containerisation | Docker Compose |
 
 ---
 
-## Prerequisites
+## Diagrams
 
-Install Colima, Docker CLI, and the Docker Compose plugin:
+All diagrams are in the [`/diagrams`](diagrams/) folder and render on GitHub.
+
+| Diagram | Description |
+|---|---|
+| [UC1 — Overall System](diagrams/uc1-overall.md) | All actors and use cases across the full platform |
+| [UC2 — API Layer](diagrams/uc2-api-layer.md) | REST endpoints, middleware, and external integrations |
+| [Class Diagram — NetLock RMM](diagrams/class-01-netlockrmm.md) | OOP structure, interfaces, and design patterns |
+| [ER Diagram — NetLock RMM](diagrams/er-01-netlockrmm.md) | Database schema — NetLock tables and ControlIT owned tables |
+
+---
+
+## Local Development
+
+This repo includes the local Docker stack for running NetLock RMM on Apple Silicon (M-series) via Colima.
+
+### Containers
+
+| Container | Image | Port | Purpose |
+|---|---|---|---|
+| `mysql-container` | `mysql:8.0` | `3306` | Database (native arm64) |
+| `netlock-rmm-server` | `nicomak101/netlock-rmm-server` | `7080` / `7082` | Backend — all server roles |
+| `netlock-rmm-web-console` | `nicomak101/netlock-rmm-web-console` | `8080` | Blazor admin web UI |
+
+> The two NetLock images are amd64-only and run under Rosetta 2 emulation via Colima's `--vz-rosetta` flag. MySQL runs natively on arm64.
+>
+> The relay is on host port `7082` (not `7081`) because macOS SSH port forwarding holds `7081` on this machine.
+
+### Prerequisites
 
 ```bash
 brew install colima docker docker-compose
@@ -32,152 +81,80 @@ mkdir -p ~/.docker/cli-plugins
 ln -sfn /opt/homebrew/opt/docker-compose/bin/docker-compose ~/.docker/cli-plugins/docker-compose
 ```
 
-Verify:
+### 1. Start Colima
 
-```bash
-docker compose version
-# Docker Compose version 5.x.x
-```
-
----
-
-## 1. Start Colima
-
-Run this after every Mac restart (Colima does not auto-start):
+Run after every Mac restart — Colima does not auto-start:
 
 ```bash
 colima start --arch aarch64 --vm-type vz --vz-rosetta --cpu 4 --memory 6
 ```
 
-> **Note:** the flag is `--vz-rosetta`, not `--rosetta`. The `--rosetta` flag does not exist in this version of Colima.
+> Use `--vz-rosetta`, not `--rosetta`. The short flag does not exist in this version.
 
 | Flag | Why |
 |---|---|
-| `--arch aarch64` | Native ARM64 VM — fast |
-| `--vm-type vz` | Apple Virtualization Framework — much faster than QEMU |
-| `--vz-rosetta` | Enables Rosetta 2 inside the VM to run amd64 containers |
-| `--cpu 4` | Allocate 4 cores (adjust to taste) |
-| `--memory 6` | 6 GB RAM — needed for MySQL + two .NET containers |
+| `--arch aarch64` | Native ARM64 VM |
+| `--vm-type vz` | Apple Virtualization Framework — faster than QEMU |
+| `--vz-rosetta` | Rosetta 2 inside the VM for amd64 containers |
+| `--cpu 4` | Adjust to taste |
+| `--memory 6` | 6 GB needed for MySQL + two .NET containers |
 
-To stop Colima: `colima stop`
-
-To check status: `colima status`
-
----
-
-## 2. Configure your API key
-
-Copy the example env file:
+### 2. Configure your API key
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` and set your values — especially `NETLOCK_API_KEY` from [members.netlockrmm.com](https://members.netlockrmm.com).
+Edit `.env` and set `NETLOCK_API_KEY` from your NetLock members portal. The `appsettings.json` files in `config/` contain only structural defaults — all secrets come from `.env` at runtime.
 
-The `appsettings.json` files in `config/` contain only structural defaults. All secrets are injected at runtime from `.env` via Docker Compose environment variables — ASP.NET Core env vars override the JSON config automatically.
-
----
-
-## 3. Start the stack
+### 3. Start the stack
 
 ```bash
-cd /path/to/NetLock-RMM-API-Layer
 docker compose up -d
 ```
 
-First run pulls ~350 MB of images. MySQL runs a healthcheck before the NetLock containers start — they will wait until MySQL is fully ready. Allow **2–3 minutes** on first boot for the schema to be created.
+First run pulls around 350 MB. MySQL runs a healthcheck before the NetLock containers start — allow 2–3 minutes on first boot.
 
----
+### Access
 
-## 4. Access
-
-| Service | URL | Default credentials |
+| Service | URL | Credentials |
 |---|---|---|
 | NetLock Web Console | http://localhost:8080 | `admin` / `admin` |
 | NetLock Server API | http://localhost:7080 | — |
 | MySQL | `localhost:3306` | root / see `.env` |
 
----
-
-## 5. Useful commands
+### Useful commands
 
 ```bash
-# Check all container statuses
-docker compose ps
-
-# Stream logs for all containers
-docker compose logs -f
-
-# Stream logs for a specific container
-docker compose logs -f netlock-rmm-server
-
-# Stop the stack (data is preserved)
-docker compose down
-
-# Restart a single container
-docker compose restart netlock-rmm-server
-
-# Pull latest images
-docker compose pull && docker compose up -d
+docker compose ps                          # check statuses
+docker compose logs -f                     # stream all logs
+docker compose logs -f netlock-rmm-server  # one container
+docker compose down                        # stop, preserve data
+docker compose pull && docker compose up -d  # pull latest
 
 # Full reset — wipes all data
-docker compose down -v && rm -rf data/mysql data/server data/web_console
-docker compose up -d
+docker compose down -v && rm -rf data/mysql data/server data/web_console && docker compose up -d
 ```
 
 ---
 
-## 6. Test Agent — Debian Lima VM
+## Test Agent — Debian Lima VM
 
-A lightweight Debian 12 (ARM64) Lima VM is included for testing the NetLock Linux agent locally.
-
-### Prerequisites
+A Debian 12 (ARM64) Lima VM is included for testing the NetLock Linux agent locally.
 
 ```bash
 brew install lima
-```
-
-### Start the VM
-
-```bash
 limactl start debian-test.yaml
-```
-
-> First start downloads the Debian cloud image (~300 MB) and runs the provision script.
-
-### Shell into the VM
-
-```bash
 limactl shell debian-test
 ```
 
-### Install the NetLock agent
+Inside the VM, download the installer from the NetLock web console at `http://localhost:8080`. Set all server fields to `192.168.5.2:7080` and relay to `192.168.5.2:7082`, then run the installer. The agent will appear in the console under your selected tenant.
 
-Inside the VM — download the installer from the NetLock web console:
-
-1. Go to `http://localhost:8080` → Download Installer
-2. Set all server fields to `192.168.5.2:7080` (the Mac host gateway — fixed by Lima)
-3. Set Relay to `192.168.5.2:7082`
-4. Select architecture: **linux-arm64**
-5. Select your Tenant and Location, then copy the download URL
-
-```bash
-wget -O installer.zip '<download-url-with-guid-and-password>'
-unzip installer.zip
-chmod +x NetLock_RMM_Agent_Installer
-sudo ./NetLock_RMM_Agent_Installer
-```
-
-The agent will appear in the NetLock web console under your selected tenant/location.
-
-> **Note:** `192.168.5.2` is Lima's fixed host gateway — it always resolves to your Mac from inside any Lima VM.
-
-### Stop / delete the VM
+> `192.168.5.2` is Lima's fixed host gateway — always resolves to your Mac from inside any Lima VM.
 
 ```bash
 limactl stop debian-test
-limactl delete debian-test   # wipes disk — use to recreate clean
+limactl delete debian-test  # wipes disk
 ```
 
 ---
@@ -186,48 +163,38 @@ limactl delete debian-test   # wipes disk — use to recreate clean
 
 ```
 NetLock-RMM-API-Layer/
-├── docker-compose.yml          # Main compose file
-├── debian-test.yaml            # Lima VM config for agent testing
+├── docker-compose.yml
+├── debian-test.yaml            # Lima VM config for local agent testing
 ├── .env                        # Secrets — gitignored, never commit
-├── .env.example                # Template — commit this
+├── .env.example                # Template — safe to commit
 ├── config/
-│   ├── server/
-│   │   └── appsettings.json    # NetLock server structural config (secrets via env)
-│   └── web_console/
-│       └── appsettings.json    # Web console structural config (secrets via env)
+│   ├── server/appsettings.json
+│   └── web_console/appsettings.json
 ├── data/                       # Gitignored — written by containers at runtime
-│   ├── mysql/
-│   ├── server/
-│   ├── web_console/
-│   └── certificates/
-└── .ai-workflow/               # Gitignored — architecture docs, UML diagrams, agent handoff, contracts
+└── diagrams/                   # UML diagrams — render on GitHub
 ```
 
 ---
 
 ## Troubleshooting
 
-**`docker compose` not found after installing**
-Wire the plugin manually:
+**`docker compose` not found**
 ```bash
 mkdir -p ~/.docker/cli-plugins
 ln -sfn /opt/homebrew/opt/docker-compose/bin/docker-compose ~/.docker/cli-plugins/docker-compose
 ```
 
-**`cannot connect to the Docker daemon`**
-Colima is not running. Start it:
+**Cannot connect to Docker daemon** — Colima is not running:
 ```bash
 colima start --arch aarch64 --vm-type vz --vz-rosetta --cpu 4 --memory 6
 ```
 
-**Web console shows error on first load**
-MySQL takes 30–60 seconds to finish schema setup on first boot. Wait and refresh.
+**Web console error on first load** — MySQL is still initialising. Wait 60 seconds and refresh.
 
 **Port conflict on 8080 or 7080**
 ```bash
-lsof -i :8080   # find what's using it
+lsof -i :8080
 ```
-Then change the port mapping in `docker-compose.yml` (e.g. `"8081:80"`).
+Change the mapping in `docker-compose.yml` if needed (e.g. `"8081:80"`).
 
-**Slow performance on NetLock containers**
-Expected — they run under Rosetta 2 x86 emulation. For production, deploy on a Linux x86_64 VPS.
+**Slow performance on NetLock containers** — expected, they run under Rosetta 2 emulation. Deploy on a Linux x86\_64 host for production.
