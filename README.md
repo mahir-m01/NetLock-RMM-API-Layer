@@ -49,6 +49,7 @@ All diagrams are in the [`/diagrams`](diagrams/) folder and render on GitHub.
 | [UC2 — API Layer](diagrams/uc2-api-layer.md) | REST endpoints, middleware, and external integrations |
 | [Class Diagram — NetLock RMM](diagrams/class-01-netlockrmm.md) | OOP structure, interfaces, and design patterns |
 | [ER Diagram — NetLock RMM](diagrams/er-01-netlockrmm.md) | Database schema — NetLock tables and ControlIT owned tables |
+| [SEQ1 — Execute Command](diagrams/seq-01-execute-command.md) | Full flow for `POST /commands/execute` — API key validation, SignalR dispatch, responseId correlation, audit logging, timeout and disconnect error paths |
 
 ---
 
