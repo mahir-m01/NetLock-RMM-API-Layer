@@ -16,5 +16,8 @@ data/certificates/
 # macOS
 .DS_Store
 
+# Diagrams — working notes (not for GitHub)
+diagrams/TODO.md
+
 # Docker
 *.log
