@@ -73,6 +73,8 @@ Phase 1 covers NetLock RMM only. Netbird and Wazuh are Phase 2.
 
 ## API Endpoints
 
+[![Run in Postman](https://run.pstmn.io/button.svg)](https://app.getpostman.com/run-collection/48552836-8ec181d0-6951-4946-bc7a-9e55f4bc7fd0)
+
 | Method | Path | Description |
 |---|---|---|
 | GET | `/health` | Service health - MySQL and SignalR status |
@@ -83,6 +85,8 @@ Phase 1 covers NetLock RMM only. Netbird and Wazuh are Phase 2.
 | GET | `/tenants` | Tenant list |
 | POST | `/commands/execute` | Dispatch shell command to a device via SignalR |
 | GET | `/audit/logs` | Audit trail query with date range and pagination |
+
+The Postman collection includes all 18 requests with test scripts, pre-configured query params, and request bodies. After importing, select the **Local Dev** environment and set `base_url` to `http://localhost:5290` with your API key.
 
 ---
 

@@ -19,8 +19,11 @@ tests/
     │   ├── SignalRCommandDispatcherTests.cs   - Timeout clamping, Base64 encoding
     │   └── TenantContextTests.cs              - IsResolved invariants, instance isolation
     └── Integration/
-        └── HealthEndpointTests.cs             - /health exempt from auth, /devices requires auth
+        ├── HealthEndpointTests.cs             - /health exempt from auth, /devices requires auth
+        └── EndpointIntegrationTests.cs        - All business endpoints against the live dev stack
 ```
+
+**Current totals: 40 tests — 40 passing.**
 
 ---
 
@@ -62,10 +65,7 @@ Tagged with `[Trait("Category", "Unit")]`. Cover pure logic that can be exercise
 
 Require the dev stack (MySQL + NetLock SignalR hub). Tagged with `[Trait("Category", "Integration")]`.
 
-Start the full ASP.NET Core application in-process via `WebApplicationFactory`, running the complete middleware pipeline against real infrastructure. Cover:
-
-- `ApiKeyMiddleware` exempts `/health` from authentication
-- `ApiKeyMiddleware` rejects unauthenticated requests to protected endpoints with 401
+Start the full ASP.NET Core application in-process via `WebApplicationFactory`, running the complete middleware pipeline against real infrastructure.
 
 **Prerequisites:**
 
@@ -73,6 +73,43 @@ Start the full ASP.NET Core application in-process via `WebApplicationFactory`, 
 colima start --arch aarch64 --vm-type vz --vz-rosetta --cpu 4 --memory 6
 docker compose up -d
 ```
+
+**Test API key:** `controlit-test-2026` (tenant\_id = 3, stored in `controlit_api_keys`)
+
+#### HealthEndpointTests
+
+Auth middleware coverage:
+
+| Test | What it verifies |
+|---|---|
+| `Health_IsExemptFromAuth` | `GET /health` returns 200 without an API key |
+| `Devices_RequiresAuth` | `GET /devices` returns 401 without an API key |
+
+#### EndpointIntegrationTests
+
+Full business endpoint coverage against the live dev stack (MySQL + NetLock hub):
+
+| Test | Endpoint | What it verifies |
+|---|---|---|
+| `GetDevices_ReturnsOk_WithPagedBody` | `GET /devices?page=1&pageSize=10` | 200 status |
+| `GetDevices_Body_HasRequiredPagedFields` | `GET /devices?page=1&pageSize=10` | Body contains `items`, `totalCount`, `page`, `pageSize` |
+| `GetDeviceById_ExistingId_ReturnsOk` | `GET /devices/27` | 200 for a device that exists in the DB |
+| `GetDeviceById_ExistingId_HasRequiredFields` | `GET /devices/27` | Body has `id == 27`, non-empty `deviceName` and `platform` |
+| `GetDeviceById_NonExistentId_Returns404` | `GET /devices/99999` | 404 for a device that does not exist |
+| `GetDashboard_ReturnsOk` | `GET /dashboard` | 200 status |
+| `GetDashboard_Body_HasRequiredFields` | `GET /dashboard` | Body has `totalDevices`, `onlineDevices`, `totalTenants`, `totalEvents` all >= 0 |
+| `GetEvents_ReturnsOk_WithPagedBody` | `GET /events?page=1&pageSize=10` | 200 status |
+| `GetEvents_Body_TotalCountIsNonNegative` | `GET /events?page=1&pageSize=10` | `totalCount` >= 0 |
+| `GetTenants_ReturnsOk_WithNonNullBody` | `GET /tenants` | 200 with a non-null array body |
+| `GetAuditLogs_ReturnsOk_WithArrayBody` | `GET /audit/logs?limit=10&offset=0` | 200 with an array body (may be empty) |
+| `PostCommandsExecute_Device27_ReturnsValidStatus` | `POST /commands/execute` | Returns 200, 503, or 504 — never 400/401/404/500 |
+| `GetDashboard_WithoutApiKey_Returns401` | `GET /dashboard` (no key) | 401 when the `x-api-key` header is absent |
+
+`POST /commands/execute` accepts three status codes because the outcome depends on whether device 27 is online at the time the test runs:
+
+- `200` - device online, command executed
+- `503` - device or hub offline
+- `504` - device reachable but command timed out
 
 ---
 
@@ -123,13 +160,12 @@ public class YourEndpointTests : IClassFixture<ControlItWebApplicationFactory>
     public YourEndpointTests(ControlItWebApplicationFactory factory)
     {
         _client = factory.CreateClient();
+        _client.DefaultRequestHeaders.Add("x-api-key", "controlit-test-2026");
     }
 
     [Fact]
     public async Task Endpoint_Condition_ExpectedOutcome()
     {
-        _client.DefaultRequestHeaders.Add("x-api-key", "your-test-key");
-
         var response = await _client.GetAsync("/your-endpoint");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -160,6 +196,9 @@ Top-level statement compilation generates an internal `Program` class. Integrati
 
 **Filter matching is case-sensitive.**
 `--filter "Category=Unit"` works. `--filter "category=unit"` finds nothing.
+
+**Device IDs are environment-specific.**
+`GetDeviceById_ExistingId_*` tests target device ID 27, which exists in the local dev MySQL instance. If the database is reset or reprovisioned, update the ID to match a real device in the new dataset.
 
 ---
 
