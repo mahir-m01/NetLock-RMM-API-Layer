@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- Target the same framework as the API project — net10.0 -->
+    <!-- In C#, TargetFramework determines which .NET runtime APIs are available. -->
+    <!-- Think of it like specifying "engines": { "node": ">=20" } in package.json -->
+    <TargetFramework>net10.0</TargetFramework>
+
+    <!-- Nullable=enable enforces null-safety at compile time, like TypeScript's strictNullChecks -->
+    <Nullable>enable</Nullable>
+
+    <!-- ImplicitUsings adds System, System.Collections.Generic, System.Linq, etc. automatically -->
+    <!-- Like having a global import in TypeScript -->
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!-- IsPackable=false: this project should never be published to NuGet — it's tests only -->
+    <IsPackable>false</IsPackable>
+
+    <!-- IsTestProject=true: marks this as a test project for IDEs and CI tooling -->
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- xunit: the test framework. Like Jest for C#. Provides [Fact], [Theory], Assert.* -->
+    <!-- Latest stable v2 — fully compatible with net10.0 and dotnet test CLI -->
+    <PackageReference Include="xunit" Version="2.9.3" />
+
+    <!-- xunit.runner.visualstudio: the adapter that lets "dotnet test" discover and run xUnit tests -->
+    <!-- PrivateAssets=all means it's only needed at build/test time, not shipped with the app -->
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+
+    <!-- Microsoft.NET.Test.Sdk: required by dotnet test to discover and execute the tests -->
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+
+    <!-- Moq: the mocking library. Like jest.fn() / jest.mock() but for C# class/interface mocking -->
+    <!-- Moq 4.x works with Moq.Setup() / Mock<T>.Object / It.IsAny<T>() patterns -->
+    <PackageReference Include="Moq" Version="4.20.72" />
+
+    <!-- Microsoft.AspNetCore.Mvc.Testing: provides WebApplicationFactory<T> for integration tests -->
+    <!-- This spins up the full ASP.NET Core pipeline in-memory — no real HTTP server needed -->
+    <!-- Must match the target framework; 10.0.x is the version for net10.0 -->
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.6" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- ProjectReference: tells MSBuild to compile and reference the API project from this test project -->
+    <!-- This is how tests access types like TenantContext, SignalRCommandDispatcher, etc. -->
+    <!-- Equivalent to importing from a local workspace package in a monorepo -->
+    <ProjectReference Include="../../src/ControlIT.Api/ControlIT.Api.csproj" />
+  </ItemGroup>
+</Project>

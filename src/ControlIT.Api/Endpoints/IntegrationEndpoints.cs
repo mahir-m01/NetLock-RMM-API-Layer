@@ -1,0 +1,175 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// IntegrationEndpoints.cs
+// Registers Netbird (mesh VPN) endpoints in Phase 1, and conditionally
+// registers Wazuh (SIEM) endpoints in Phase 2.
+//
+// WHY conditional Wazuh registration: IWazuhClient has no Phase 1 implementation.
+// Registering the routes unconditionally would cause a 500 on every Wazuh request
+// (DI would fail to resolve IWazuhClient). The `if (Wazuh:Enabled)` guard means
+// those routes simply don't exist unless Wazuh is configured.
+//
+// Audit coverage: All state-mutating operations (enrol, delete, acknowledge)
+// write audit entries both before (PENDING) and after (SUCCESS) execution.
+// ─────────────────────────────────────────────────────────────────────────────
+namespace ControlIT.Api.Endpoints;
+
+using ControlIT.Api.Domain.Interfaces;
+using ControlIT.Api.Domain.Models;
+using ControlIT.Api.Application;
+using ControlIT.Api.Domain.DTOs.Requests;
+
+public static class IntegrationEndpoints
+{
+    public static void Map(WebApplication app)
+    {
+        // ── Netbird — Phase 1 ─────────────────────────────────────────────────
+
+        // GET /network/peers — list all Netbird mesh peers
+        app.MapGet("/network/peers", async (INetbirdClient netbird) =>
+        {
+            var peers = await netbird.GetPeersAsync();
+            return Results.Ok(peers);
+        }).RequireRateLimiting("api");
+
+        // GET /network/peers/{id} — get a specific peer by Netbird peer ID
+        app.MapGet("/network/peers/{id}", async (string id, INetbirdClient netbird) =>
+        {
+            var peer = await netbird.GetPeerByIdAsync(id);
+            return peer is null ? Results.NotFound() : Results.Ok(peer);
+        }).RequireRateLimiting("api");
+
+        // POST /network/enrol?setupKey=<key> — enrol a new peer in the mesh network
+        // Writes audit entries before and after for DPDP compliance.
+        app.MapPost("/network/enrol", async (
+            string setupKey,
+            INetbirdClient netbird,
+            IAuditService audit,
+            TenantContext tenant,
+            HttpContext ctx) =>
+        {
+            await audit.RecordAsync(new AuditEntry
+            {
+                TenantId = tenant.TenantId,
+                ActorKeyId = GetActorKeyId(ctx),
+                Action = "DEVICE_ENROL_MESH",
+                ResourceType = "NetworkPeer",
+                IpAddress = ctx.Connection.RemoteIpAddress?.ToString(),
+                Result = "PENDING"
+            });
+
+            await netbird.EnrolPeerAsync(setupKey);
+
+            await audit.RecordAsync(new AuditEntry
+            {
+                TenantId = tenant.TenantId,
+                ActorKeyId = GetActorKeyId(ctx),
+                Action = "DEVICE_ENROL_MESH",
+                ResourceType = "NetworkPeer",
+                IpAddress = ctx.Connection.RemoteIpAddress?.ToString(),
+                Result = "SUCCESS"
+            });
+
+            return Results.Ok();
+        }).RequireRateLimiting("api");
+
+        // DELETE /network/peer/{id} — remove a peer from the mesh network
+        app.MapDelete("/network/peer/{id}", async (
+            string id,
+            INetbirdClient netbird,
+            IAuditService audit,
+            TenantContext tenant,
+            HttpContext ctx) =>
+        {
+            await audit.RecordAsync(new AuditEntry
+            {
+                TenantId = tenant.TenantId,
+                ActorKeyId = GetActorKeyId(ctx),
+                Action = "NETWORK_PEER_DELETE",
+                ResourceType = "NetworkPeer",
+                ResourceId = id,
+                IpAddress = ctx.Connection.RemoteIpAddress?.ToString(),
+                Result = "PENDING"
+            });
+
+            await netbird.RemovePeerAsync(id);
+
+            await audit.RecordAsync(new AuditEntry
+            {
+                TenantId = tenant.TenantId,
+                ActorKeyId = GetActorKeyId(ctx),
+                Action = "NETWORK_PEER_DELETE",
+                ResourceType = "NetworkPeer",
+                ResourceId = id,
+                IpAddress = ctx.Connection.RemoteIpAddress?.ToString(),
+                Result = "SUCCESS"
+            });
+
+            return Results.NoContent();
+        }).RequireRateLimiting("api");
+
+        // ── Wazuh — Phase 2 (conditional registration) ───────────────────────
+        // These routes are only registered when Wazuh:Enabled = true in config.
+        // WHY conditional: IWazuhClient has no Phase 1 implementation.
+        // If these routes were registered unconditionally, every request would
+        // fail with an InvalidOperationException from the DI container.
+        if (app.Configuration.GetValue<bool>("Wazuh:Enabled"))
+        {
+            // GET /alerts/wazuh — list Wazuh security alerts with filtering
+            app.MapGet("/alerts/wazuh", async (
+                [AsParameters] AlertFilter filter,
+                IWazuhClient wazuh) =>
+            {
+                var alerts = await wazuh.GetAlertsAsync(filter);
+                return Results.Ok(alerts);
+            }).RequireRateLimiting("api");
+
+            // POST /alerts/acknowledge?alertId=<id> — acknowledge a security alert
+            app.MapPost("/alerts/acknowledge", async (
+                string alertId,
+                IWazuhClient wazuh,
+                IAuditService audit,
+                TenantContext tenant,
+                HttpContext ctx) =>
+            {
+                await audit.RecordAsync(new AuditEntry
+                {
+                    TenantId = tenant.TenantId,
+                    ActorKeyId = GetActorKeyId(ctx),
+                    Action = "ALERT_ACKNOWLEDGE",
+                    ResourceType = "SecurityAlert",
+                    ResourceId = alertId,
+                    IpAddress = ctx.Connection.RemoteIpAddress?.ToString(),
+                    Result = "PENDING"
+                });
+
+                await wazuh.AcknowledgeAlertAsync(alertId);
+
+                await audit.RecordAsync(new AuditEntry
+                {
+                    TenantId = tenant.TenantId,
+                    ActorKeyId = GetActorKeyId(ctx),
+                    Action = "ALERT_ACKNOWLEDGE",
+                    ResourceType = "SecurityAlert",
+                    ResourceId = alertId,
+                    IpAddress = ctx.Connection.RemoteIpAddress?.ToString(),
+                    Result = "SUCCESS"
+                });
+
+                return Results.Ok();
+            }).RequireRateLimiting("api");
+        }
+    }
+
+    // Returns the first 16 chars of the SHA-256 hash of the API key header.
+    // Shared helper — same implementation as in CommandEndpoints.
+    // Never logs the raw key value — only the hash prefix.
+    private static string GetActorKeyId(HttpContext ctx)
+    {
+        var rawKey = ctx.Request.Headers["x-api-key"].FirstOrDefault() ?? string.Empty;
+        if (string.IsNullOrEmpty(rawKey)) return "unknown";
+        var hash = Convert.ToHexString(
+            System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(rawKey)));
+        return hash[..16].ToLowerInvariant();
+    }
+}

@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <!-- Target .NET 10 — the LTS-aligned version used by ControlIT -->
+    <TargetFramework>net10.0</TargetFramework>
+    <!-- Enable nullable reference types — catches null bugs at compile time, like TypeScript's strictNullChecks -->
+    <Nullable>enable</Nullable>
+    <!-- ImplicitUsings adds common using statements automatically (System, Microsoft.Extensions, etc.) -->
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>ControlIT.Api</RootNamespace>
+    <AssemblyName>ControlIT.Api</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Dapper: lightweight SQL mapper — think of it as "SQL with auto-mapping to C# classes" -->
+    <!-- Used for ALL NetLock table reads (devices, events, tenants, locations, accounts) -->
+    <PackageReference Include="Dapper" Version="2.1.72" />
+    <!-- MySqlConnector: the async-first MySQL driver for .NET. Dapper uses this to talk to MySQL -->
+    <PackageReference Include="MySqlConnector" Version="2.5.0" />
+    <!-- EF Core: full ORM for ControlIT's own tables (controlit_*) only. NOT used for NetLock tables -->
+    <!-- EF Core 9.0.0 — must match Pomelo version. Pomelo 9.0.0 supports EF Core 9.x only. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.0" />
+    <!-- Pomelo: the community MySQL provider for EF Core — replaces Oracle's official one -->
+    <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="9.0.0" />
+    <!-- EF Core Design: needed for running "dotnet ef migrations add" — excluded from runtime output -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.0">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <!-- SignalR Client: connects to NetLock's /commandHub as an admin client -->
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="9.0.0" />
+    <!-- Http.Resilience: retry/circuit-breaker policies for outbound HTTP (Netbird, Wazuh) -->
+    <!-- NOTE: Do NOT use Microsoft.Extensions.Http.Polly — it is deprecated. Use this instead. -->
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="9.0.0" />
+  </ItemGroup>
+</Project>
