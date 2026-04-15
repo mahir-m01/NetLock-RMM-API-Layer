@@ -32,9 +32,8 @@ public class AuditEntry
     // The tenant this audit record belongs to. Always from TenantContext — never from request.
     public int TenantId { get; set; }
 
-    // First 16 chars of the SHA-256 hash of the API key that made this request.
-    // Enough to trace which key was used without exposing the full hash or the raw key.
-    // In TypeScript: apiKeyHash.substring(0, 16)
+    // First 16 characters of the SHA-256 hash of the API key that made this request.
+    // Sufficient for traceability without exposing the full hash or the raw key.
     public string ActorKeyId { get; set; } = string.Empty;
 
     // What action was performed. Constants: "COMMAND_EXECUTE", "DEVICE_ENROL_MESH",

@@ -1,13 +1,9 @@
 // ErrorHandlingMiddleware.cs — Global exception handler for the API pipeline.
 // Pattern: Middleware (ASP.NET Core pipeline interceptor)
 //
-// In ASP.NET Core, middleware is a chain of functions that process HTTP requests.
-// Think of it like Express.js middleware (app.use(...)). Each middleware calls _next(context)
-// to pass the request to the next handler in the chain.
-//
-// This middleware wraps the entire pipeline in a try/catch so that any unhandled exception
-// from ANY endpoint is caught here and converted to a structured JSON error response.
-// It is registered FIRST in the pipeline so it catches errors from all subsequent middleware.
+// Wraps the entire pipeline in a try/catch so that any unhandled exception from any
+// endpoint is caught here and converted to a structured JSON error response.
+// Registered first in the pipeline to catch errors from all subsequent middleware.
 
 namespace ControlIT.Api.Common;
 
@@ -17,23 +13,16 @@ namespace ControlIT.Api.Common;
 /// </summary>
 public class ErrorHandlingMiddleware
 {
-    // _next is a delegate to the next middleware in the pipeline.
-    // In TypeScript terms: it's like a "next()" function in Express middleware.
+    // Delegate to the next middleware in the pipeline.
     private readonly RequestDelegate _next;
     private readonly ILogger<ErrorHandlingMiddleware> _logger;
 
-    // Constructor injection — ASP.NET Core's DI container provides these automatically.
-    // In TypeScript, this would be like having the framework inject dependencies via decorators.
     public ErrorHandlingMiddleware(RequestDelegate next, ILogger<ErrorHandlingMiddleware> logger)
     {
         _next = next;
         _logger = logger;
     }
 
-    /// <summary>
-    /// InvokeAsync is called by the ASP.NET Core pipeline on every HTTP request.
-    /// In Express.js terms: this IS the middleware function (req, res, next) => {...}
-    /// </summary>
     public async Task InvokeAsync(HttpContext context)
     {
         try

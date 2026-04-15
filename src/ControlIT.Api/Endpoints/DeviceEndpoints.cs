@@ -22,8 +22,6 @@ public static class DeviceEndpoints
     public static void Map(WebApplication app)
     {
         // GET /devices?page=1&pageSize=25&platform=Windows&onlineOnly=true&searchTerm=server
-        // [AsParameters] binds all DeviceFilter properties from query string parameters.
-        // This is Minimal API's equivalent of [FromQuery] on a controller action parameter.
         app.MapGet("/devices", async (
             [AsParameters] DeviceFilter filter,
             ControlItFacade facade,
@@ -33,17 +31,13 @@ public static class DeviceEndpoints
             return Results.Ok(result);
         }).RequireRateLimiting("api");
 
-        // GET /devices/{id}
-        // {id:int} constrains the route parameter to integers only.
-        // Non-integer values will return 400 automatically.
+        // GET /devices/{id} — {id:int} route constraint rejects non-integer values with 400.
         app.MapGet("/devices/{id:int}", async (
             int id,
             ControlItFacade facade,
             TenantContext tenant) =>
         {
             var device = await facade.GetDeviceByIdAsync(id, tenant);
-            // Results.NotFound() returns 404 with no body.
-            // Results.Ok(device) returns 200 with the device as JSON.
             return device is null ? Results.NotFound() : Results.Ok(device);
         }).RequireRateLimiting("api");
 

@@ -1,9 +1,6 @@
 // DeviceFilter.cs — Query parameters for GET /devices.
-// [AsParameters] in the endpoint handler tells ASP.NET Core to bind query string params
-// to this class's properties automatically.
-//
-// In TypeScript/Express, you'd do: const { platform, onlineOnly, page } = req.query
-// In ASP.NET Core Minimal APIs: [AsParameters] DeviceFilter filter does the same thing.
+// [AsParameters] in the endpoint handler instructs ASP.NET Core to bind
+// query string parameters to this class's properties automatically.
 
 namespace ControlIT.Api.Domain.DTOs.Requests;
 
@@ -16,8 +13,7 @@ public class DeviceFilter
     // Optional: filter by platform string ("Windows", "Linux", "macOS")
     public string? Platform { get; set; }
 
-    // Optional: if true, only return devices that checked in within the last 5 minutes
-    // '?' on bool means "nullable boolean" — in TypeScript: boolean | undefined
+    // Optional: when true, only return devices that checked in within the last 5 minutes.
     public bool? OnlineOnly { get; set; }
 
     // Optional: filter devices by name (SQL LIKE %term% search)

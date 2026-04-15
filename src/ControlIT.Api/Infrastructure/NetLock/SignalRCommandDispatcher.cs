@@ -21,9 +21,8 @@ using ControlIT.Api.Domain.Models;
 
 public class SignalRCommandDispatcher : ICommandDispatcher
 {
-    // We depend on the concrete NetLockSignalRService, not an interface, because
-    // we need InvokeCommandAsync which isn't on IEndpointProvider.
-    // (IEndpointProvider is the higher-level facade that wraps this dispatcher.)
+    // Depends on the concrete NetLockSignalRService because InvokeCommandAsync
+    // is not part of IEndpointProvider (which is the higher-level abstraction).
     private readonly NetLockSignalRService _signalR;
     private readonly ILogger<SignalRCommandDispatcher> _logger;
 
@@ -38,9 +37,8 @@ public class SignalRCommandDispatcher : ICommandDispatcher
         string deviceAccessKey, CommandRequest request,
         CancellationToken cancellationToken = default)
     {
-        // Clamp timeout to 5–120 seconds. min=5 prevents instant timeouts from
-        // misconfigured clients. max=120 prevents holding HTTP connections forever.
-        // Math.Clamp is C#'s equivalent of Math.min(Math.max(min, x), max) in JS.
+        // Clamp timeout: min=5 prevents instant timeouts from misconfigured clients;
+        // max=120 prevents holding HTTP connections indefinitely.
         var timeoutSeconds = Math.Clamp(request.TimeoutSeconds, 5, 120);
         var timeout = TimeSpan.FromSeconds(timeoutSeconds);
 
@@ -78,8 +76,7 @@ public class SignalRCommandDispatcher : ICommandDispatcher
         // - The SignalR connection drops (→ throws OperationCanceledException or similar)
         var rawResult = await _signalR.InvokeCommandAsync(deviceAccessKey, commandJson, timeout);
 
-        // Wrap the raw output string in a typed CommandResult.
-        // Status = "SUCCESS" here — the caller (CommandEndpoints) writes the audit record.
+        // Status is set here; the caller (CommandEndpoints) writes the audit record.
         return new CommandResult
         {
             DeviceId = deviceAccessKey,

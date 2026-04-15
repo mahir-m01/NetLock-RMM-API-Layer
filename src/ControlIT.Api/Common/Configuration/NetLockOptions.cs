@@ -1,7 +1,6 @@
 // NetLockOptions.cs — Strongly-typed configuration binding for the NetLock integration.
-// In C#, the Options pattern lets you bind a JSON section to a typed class.
-// Instead of config["NetLock:HubUrl"] everywhere, you inject IOptions<NetLockOptions>
-// and get compile-time safety. This is the standard C# equivalent of reading process.env in TypeScript.
+// The Options pattern binds a JSON section to a typed class, giving compile-time safety
+// over raw config key lookups. Inject IOptions<NetLockOptions> to access these values.
 
 namespace ControlIT.Api.Common.Configuration;
 

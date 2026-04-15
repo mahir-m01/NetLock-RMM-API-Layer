@@ -26,8 +26,8 @@ public class AuditRepository
         _factory = factory;
     }
 
-    // Inserts a single audit entry. Called by AuditService.RecordAsync which
-    // wraps this in a try/catch — so this method can throw on DB failure.
+    // Inserts a single audit entry. AuditService.RecordAsync wraps this in a
+    // try/catch, so throwing on DB failure is correct here.
     public async Task InsertAsync(AuditEntry entry)
     {
         using var conn = await _factory.CreateConnectionAsync();
@@ -40,18 +40,17 @@ public class AuditRepository
                 (@Timestamp, @TenantId, @ActorKeyId, @Action, @ResourceType,
                  @ResourceId, @IpAddress, @Result, @ErrorMessage)
             """,
-            entry);  // Dapper maps entry's public properties to @Parameters by name
+            entry);
     }
 
-    // Queries audit log with optional date range filtering and pagination.
-    // tenantId comes from TenantContext — never from a request parameter.
+    // Queries the audit log with optional date range filtering and pagination.
     public async Task<IEnumerable<AuditEntry>> QueryAsync(
         int tenantId, DateTime? from, DateTime? to, int limit, int offset)
     {
         using var conn = await _factory.CreateConnectionAsync();
 
-        // DynamicParameters allows building the WHERE clause conditionally —
-        // only add date conditions if the caller provided them.
+        // DynamicParameters builds the WHERE clause conditionally,
+        // adding date bounds only when the caller provides them.
         var conditions = new List<string> { "tenant_id = @tenantId" };
         var p = new DynamicParameters();
         p.Add("tenantId", tenantId);

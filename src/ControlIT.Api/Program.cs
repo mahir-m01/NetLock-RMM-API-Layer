@@ -1,11 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Program.cs — Application entry point and DI/middleware configuration
 //
-// This is the ASP.NET Core "Minimal Hosting" model (introduced in .NET 6).
-// Unlike older .NET apps, there's no Startup.cs or explicit Main() method.
-// The top-level statements here ARE the Main() method.
-//
-// Order is critical:
+// Uses the ASP.NET Core Minimal Hosting model. Order is critical:
 //   1. Static settings (SqlMapper) BEFORE var builder = ...
 //   2. DI registrations BEFORE var app = builder.Build()
 //   3. Middleware pipeline AFTER var app = builder.Build()
@@ -36,7 +32,6 @@ DefaultTypeMap.MatchNamesWithUnderscores = true;
 var builder = WebApplication.CreateBuilder(args);
 
 // ── CORS ────────────────────────────────────────────────────────────────────
-// Allow the dashboard (React/Next.js) to make requests to this API.
 // AllowedOrigins is read from config so it can differ per environment.
 builder.Services.AddCors(options =>
 {
@@ -78,8 +73,7 @@ builder.Services.AddRateLimiter(options =>
 
 // ── Options binding ──────────────────────────────────────────────────────
 // Configure<T>() binds a configuration section to a strongly-typed options class.
-// Equivalent to reading config["NetLock:HubUrl"] but with a typed class.
-// IOptions<NetLockOptions> can then be injected into any service that needs these values.
+// IOptions<T> is then available for injection into any service that needs these values.
 builder.Services.Configure<ControlIT.Api.Common.Configuration.NetLockOptions>(
     builder.Configuration.GetSection("NetLock"));
 builder.Services.Configure<ControlIT.Api.Common.Configuration.NetbirdOptions>(
@@ -90,14 +84,13 @@ builder.Services.Configure<ControlIT.Api.Common.Configuration.DatabaseOptions>(
     builder.Configuration.GetSection("Database"));
 
 // ── Infrastructure — Singleton ───────────────────────────────────────────
-// Singleton = one instance for the entire application lifetime.
-// WHY: IDbConnectionFactory only holds a connection string (thread-safe).
-// It creates short-lived connections on demand — the factory itself stays alive.
+// WHY Singleton: IDbConnectionFactory only holds a connection string (thread-safe).
+// It creates short-lived connections on demand; the factory itself stays alive.
 builder.Services.AddSingleton<IDbConnectionFactory, MySqlConnectionFactory>();
 
 // ── Infrastructure — Scoped ──────────────────────────────────────────────
-// Scoped = one instance per HTTP request. Each request gets its own repository,
-// which in turn creates its own DB connection. Connections are disposed at end of request.
+// Scoped: one instance per HTTP request. Each repository creates its own DB
+// connection, which is disposed when the request ends.
 builder.Services.AddScoped<IDeviceRepository, MySqlDeviceRepository>();
 builder.Services.AddScoped<IEventRepository, MySqlEventRepository>();
 builder.Services.AddScoped<ITenantRepository, MySqlTenantRepository>();
@@ -105,7 +98,8 @@ builder.Services.AddScoped<ITenantRepository, MySqlTenantRepository>();
 // ── Application — Scoped services ────────────────────────────────────────
 builder.Services.AddScoped<IAuditService, AuditService>();
 
-// AuditRepository is registered directly (no interface) because only AuditService uses it.
+// AuditRepository is registered without an interface because it is an internal
+// implementation detail used only by AuditService.
 builder.Services.AddScoped<AuditRepository>();
 
 builder.Services.AddScoped<IEndpointProvider, NetLockEndpointProvider>();
@@ -118,7 +112,7 @@ builder.Services.AddScoped<ICommandDispatcher, SignalRCommandDispatcher>();
 builder.Services.AddScoped<ControlItFacade>();
 builder.Services.AddScoped<TenantContext>();
 
-// NotificationFactory is an instance class (NOT static) — must be Scoped for DI injection.
+// NotificationFactory is an instance class so it can be injected and replaced in tests.
 builder.Services.AddScoped<NotificationFactory>();
 
 // ── Infrastructure — Singleton hosted service for SignalR connection ──────
@@ -127,9 +121,8 @@ builder.Services.AddScoped<NotificationFactory>();
 // and the response correlation would break (responses go to wrong connections).
 builder.Services.AddSingleton<NetLockSignalRService>();
 
-// AddHostedService registers NetLockSignalRService as an IHostedService.
-// We use the existing Singleton instance (not create a second one) to avoid
-// having two instances with two separate _pendingCommands dictionaries.
+// Resolves the existing Singleton instance rather than creating a second one,
+// which would produce two separate _pendingCommands dictionaries.
 builder.Services.AddHostedService(sp => sp.GetRequiredService<NetLockSignalRService>());
 
 // ── ISchemaValidator — Singleton ─────────────────────────────────────────
@@ -146,22 +139,20 @@ builder.Services.AddDbContext<ControlItDbContext>(options =>
 {
     var cs = builder.Configuration.GetConnectionString("ControlIt")
              ?? throw new InvalidOperationException("Connection string 'ControlIt' is required.");
-    // UseMySql with ServerVersion.AutoDetect: Pomelo queries the server version on first connect.
-    // This ensures the correct MySQL syntax is used (MySQL 8.x vs 5.7, MariaDB, etc.)
+    // ServerVersion.AutoDetect queries the server version on first connect,
+    // ensuring the correct MySQL syntax variant is used (MySQL 8.x, 5.7, MariaDB, etc.).
     options.UseMySql(cs, ServerVersion.AutoDetect(cs));
 });
 
 // ── Health checks ─────────────────────────────────────────────────────────
-// Built-in ASP.NET Core health check system. Results are reported at GET /healthz
-// (separate from the custom /health endpoint which adds Netbird checks).
-// Note: the custom /health endpoint in HealthEndpoints.cs is the primary health check
-// endpoint — this provides the ASP.NET built-in system for framework integrations.
+// Registers the built-in ASP.NET Core health check infrastructure, available at GET /healthz.
+// The custom /health endpoint in HealthEndpoints.cs is the primary health check for this API;
+// this registration provides the framework health system for platform integrations.
 builder.Services.AddHealthChecks();
 
 // ── HTTP clients ──────────────────────────────────────────────────────────
-// IHttpClientFactory manages HttpClient instances — avoids socket exhaustion
-// that occurs when creating new HttpClient() instances per request.
-// AddHttpClient<INetbirdClient, NetbirdApiClient> registers a typed client.
+// IHttpClientFactory manages HttpClient lifetime and connection pooling,
+// preventing socket exhaustion from per-request HttpClient instantiation.
 builder.Services.AddHttpClient<INetbirdClient, ControlIT.Api.Infrastructure.Netbird.NetbirdApiClient>();
 
 // Named clients for notification channels.
@@ -173,11 +164,9 @@ builder.Services.AddHttpClient("webhook");
 var app = builder.Build();
 
 // ── Middleware pipeline — order is critical ───────────────────────────────────
-// Each middleware wraps the next one. The order here determines processing order.
-// Think of it as nested functions: ErrorHandling(Cors(Auth(RateLimit(endpoint)))).
 
 app.UseMiddleware<ErrorHandlingMiddleware>();     // 1. Catch all unhandled exceptions
-// WHY first: if anything in the pipeline throws, this catches it and returns a clean JSON error.
+// WHY first: wraps the entire pipeline so any downstream exception returns a clean JSON error.
 
 app.UseCors();                                   // 2. CORS before auth
 // WHY before auth: preflight OPTIONS requests must succeed without an API key.
@@ -186,18 +175,17 @@ app.UseMiddleware<ApiKeyMiddleware>();            // 3. Auth + tenant derivation
 // Sets TenantContext.TenantId from DB lookup. /health is exempt.
 
 app.UseRateLimiter();                            // 4. Rate limiting after auth
-// WHY after auth: rate limit per authenticated client, not per IP.
+// WHY after auth: limits are applied per authenticated client, not per IP.
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── Schema validation at startup ─────────────────────────────────────────────
-// Run NetLockSchemaValidator before the API accepts any traffic.
-// If any required Dapper column is missing from NetLock's schema, this throws
-// InvalidOperationException and prevents the host from reaching app.Run().
-// WHY: better to crash loudly at startup than to silently return null data.
+// Runs NetLockSchemaValidator before the API accepts any traffic. If any required
+// Dapper column is missing from NetLock's schema, this throws InvalidOperationException
+// and prevents the host from reaching app.Run().
+// WHY: fail-fast at startup rather than silently returning null/default data.
 //
-// CreateScope() is needed because ISchemaValidator is Singleton — we can resolve
-// it directly from the root service provider. But using a scope is the safe pattern
-// and works regardless of whether the registration is Scoped or Singleton.
+// A scope is used here as a safe pattern that works regardless of whether
+// the validator is registered as Scoped or Singleton.
 using (var scope = app.Services.CreateScope())
 {
     var validator = scope.ServiceProvider.GetRequiredService<ISchemaValidator>();
@@ -206,9 +194,9 @@ using (var scope = app.Services.CreateScope())
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── Endpoint registration ─────────────────────────────────────────────────────
-// Each group registers its routes via the static Map(app) method.
-// This pattern (static Map method, not controller classes) is called "Minimal API".
-// It's lighter than MVC controllers and avoids reflection-based attribute routing.
+// Each group registers its routes via its static Map(app) method.
+// This Minimal API pattern is lighter than MVC controllers and avoids
+// reflection-based attribute routing.
 DeviceEndpoints.Map(app);
 EventEndpoints.Map(app);
 TenantEndpoints.Map(app);

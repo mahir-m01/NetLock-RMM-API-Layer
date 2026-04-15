@@ -13,20 +13,14 @@ using ControlIT.Api.Application;
 using ControlIT.Api.Domain.DTOs.Requests;
 using ControlIT.Api.Domain.Models;
 
-// In C#, interfaces define a "contract" — similar to TypeScript interfaces, but they're
-// also used for Dependency Injection so we can swap implementations without changing callers.
 public interface IDeviceRepository
 {
-    // Returns a paginated list of devices. TenantContext is like a "session variable"
-    // that was set by the middleware — it tells us which tenant this request belongs to.
-    // The tuple return `(IEnumerable<Device> Items, int TotalCount)` is C#'s way of returning
-    // multiple values — like `{ items, total }` destructuring in JavaScript.
+    // Returns a paginated list of devices filtered to the given tenant.
     Task<(IEnumerable<Device> Items, int TotalCount)> GetAllAsync(
         DeviceFilter filter, TenantContext tenantContext,
         CancellationToken cancellationToken = default);
 
-    // Null return (`Device?`) means "not found". The `?` is C#'s nullable reference type —
-    // similar to `Device | null` in TypeScript.
+    // Returns null when the device is not found in the tenant's scope.
     Task<Device?> GetByIdAsync(
         int id, TenantContext tenantContext,
         CancellationToken cancellationToken = default);

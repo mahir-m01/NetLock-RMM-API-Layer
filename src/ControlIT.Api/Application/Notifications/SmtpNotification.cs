@@ -22,9 +22,8 @@ public class SmtpNotification : INotificationChannel
     private readonly string _from;
     private readonly string _to;
 
-    // Constructor takes individual parameters (not IConfiguration) because
-    // NotificationFactory extracts the values from config and passes them here.
-    // This keeps SmtpNotification testable — you can instantiate it directly in tests.
+    // Accepts individual values rather than IConfiguration so that SmtpNotification
+    // can be instantiated directly in tests without a configuration object.
     public SmtpNotification(string host, int port, string from, string to)
     {
         _host = host;

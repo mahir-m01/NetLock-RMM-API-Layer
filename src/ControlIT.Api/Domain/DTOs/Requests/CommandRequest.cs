@@ -1,9 +1,6 @@
 // CommandRequest.cs — Request DTO for POST /commands/execute.
-// A DTO (Data Transfer Object) is a class used ONLY to carry data between layers.
-// In TypeScript, you'd use a plain interface or zod schema. In C#, we use a class.
-//
-// This is what the Next.js dashboard sends in the HTTP request body (JSON).
-// It is NOT a domain model — it doesn't live in the database or carry business logic.
+// Carries the JSON body sent by the dashboard to the command endpoint.
+// Not a domain model — no database mapping or business logic.
 
 namespace ControlIT.Api.Domain.DTOs.Requests;
 

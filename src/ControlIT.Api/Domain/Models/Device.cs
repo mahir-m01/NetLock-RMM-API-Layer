@@ -6,12 +6,8 @@
 // Our job is to READ and PRESENT, not to mutate. Rich domain methods would be inappropriate.
 //
 // ORM mapping:
-// This class is mapped by Dapper (NOT EF Core). Dapper reads rows from the `devices` table
-// and maps column names to property names via SqlMapper.Settings.MatchNamesWithUnderscores = true.
-// That setting (enabled in Program.cs) automatically maps:
-//   device_name  → DeviceName
-//   tenant_id    → TenantId
-//   last_access  → LastAccess  ... and so on.
+// Mapped by Dapper via MatchNamesWithUnderscores = true (set in Program.cs), which
+// automatically converts snake_case column names to PascalCase property names.
 
 namespace ControlIT.Api.Domain.Models;
 

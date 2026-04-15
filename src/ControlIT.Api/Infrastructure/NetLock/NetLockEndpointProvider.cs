@@ -1,15 +1,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // NetLockEndpointProvider.cs
-// Pattern: Adapter — wraps NetLockSignalRService (a SignalR-specific class)
-// behind the IEndpointProvider interface (a generic abstraction).
+// Pattern: Adapter — wraps NetLockSignalRService behind the IEndpointProvider interface.
 //
 // WHY: ControlItFacade depends on IEndpointProvider, not on NetLockSignalRService.
-// This means the facade never imports any SignalR types. If NetLock is replaced,
-// only this adapter and SignalRCommandDispatcher need to change.
-//
-// Think of it like an electrical adapter: the appliance (ControlItFacade)
-// plugs into the standard socket (IEndpointProvider), and the adapter handles
-// the voltage conversion (SignalR protocol details).
+// The facade imports no SignalR types. If NetLock is replaced, only this adapter
+// and SignalRCommandDispatcher need to change.
 // ─────────────────────────────────────────────────────────────────────────────
 namespace ControlIT.Api.Infrastructure.NetLock;
 
@@ -17,8 +12,8 @@ using ControlIT.Api.Domain.Interfaces;
 
 public class NetLockEndpointProvider : IEndpointProvider
 {
-    // We depend on the Singleton NetLockSignalRService directly here because
-    // this provider is a thin adapter — it has no business logic of its own.
+    // Depends on the concrete NetLockSignalRService — this adapter has no business logic
+    // of its own, so an additional interface abstraction is unnecessary.
     private readonly NetLockSignalRService _signalR;
     private readonly ILogger<NetLockEndpointProvider> _logger;
 
@@ -29,23 +24,20 @@ public class NetLockEndpointProvider : IEndpointProvider
         _logger = logger;
     }
 
-    // Delegates to NetLockSignalRService.IsConnected.
-    // Used by health checks and pre-flight validation in ControlItFacade.
     public bool IsConnected => _signalR.IsConnected;
 
-    // Identifies this provider in health responses and logs.
     public string ProviderName => "NetLock";
 
     public async Task<string> DispatchCommandAsync(
         string deviceAccessKey, string commandJson, TimeSpan timeout,
         CancellationToken cancellationToken = default)
     {
-        // Pre-flight check — give a clear error message instead of letting SignalR throw.
+        // Pre-flight check produces a clear error rather than letting SignalR throw an opaque one.
         if (!_signalR.IsConnected)
             throw new InvalidOperationException(
                 "NetLock SignalR hub is not connected. Command dispatch unavailable.");
 
-        // Delegate to the underlying service. All correlation logic is in NetLockSignalRService.
+        // All correlation logic lives in NetLockSignalRService.
         return await _signalR.InvokeCommandAsync(deviceAccessKey, commandJson, timeout);
     }
 }

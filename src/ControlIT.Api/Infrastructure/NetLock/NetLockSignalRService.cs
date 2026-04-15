@@ -39,8 +39,7 @@ public class NetLockSignalRService : IHostedService, IAsyncDisposable
     private readonly ILogger<NetLockSignalRService> _logger;
     private readonly ISchemaValidator _schemaValidator;
 
-    // The SignalR HubConnection is created in StartAsync and nulled in DisposeAsync.
-    // Nullable because it doesn't exist until StartAsync runs.
+    // Created in StartAsync. Nullable because it does not exist until StartAsync runs.
     private HubConnection? _connection;
 
     /// <summary>
@@ -58,7 +57,6 @@ public class NetLockSignalRService : IHostedService, IAsyncDisposable
     private readonly ConcurrentDictionary<string, TaskCompletionSource<string>>
         _pendingCommands = new();
 
-    // True when the SignalR connection is in the Connected state.
     // Checked by IEndpointProvider.IsConnected before every dispatch.
     public bool IsConnected =>
         _connection?.State == HubConnectionState.Connected;
@@ -76,15 +74,11 @@ public class NetLockSignalRService : IHostedService, IAsyncDisposable
     }
 
     // ── IHostedService ────────────────────────────────────────────────────────
-    // StartAsync is called by the ASP.NET host when the application starts.
-    // StopAsync is called on graceful shutdown.
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        // Validate the NetLock DB schema BEFORE opening the SignalR connection.
-        // If any required column is missing, this throws and the app won't start.
-        // WHY: better to fail-fast at startup than to silently return null values
-        // from Dapper queries at runtime.
+        // Validate the NetLock DB schema before opening the SignalR connection.
+        // Throws if any required column is missing, preventing the host from starting.
         await _schemaValidator.ValidateRequiredColumnsAsync(cancellationToken);
 
         // Build the HubConnection — configures the URL, auth header, and retry policy.
@@ -105,21 +99,19 @@ public class NetLockSignalRService : IHostedService, IAsyncDisposable
 
         // ── Response handler — keyed by device_id ─────────────────────────────
         // "ReceiveClientResponseRemoteShell" is the SignalR method name on the NetLock hub.
-        // It delivers the command output as a plain string: "device_id>>nlocksep<<output"
+        // It delivers command output as a plain string: "device_id>>nlocksep<<output"
         _connection.On<string>("ReceiveClientResponseRemoteShell", (result) =>
         {
-            // Split on the NetLock separator. StringSplitOptions.None preserves empty strings.
             var parts = result.Split(">>nlocksep<<", 2);
 
             if (parts.Length == 2 && _pendingCommands.TryRemove(parts[0], out var tcs))
             {
-                // parts[0] = device_id (string), parts[1] = output text
-                // TrySetResult delivers the result to the awaiting InvokeCommandAsync call.
+                // parts[0] = device_id, parts[1] = output text
                 tcs.TrySetResult(parts[1]);
             }
             else
             {
-                // Malformed response or no matching pending command — log and ignore.
+                // Malformed response or no matching pending command.
                 // Do NOT throw here — this runs on the SignalR receive thread.
                 _logger.LogWarning(
                     "Received SignalR response with no matching pending command. DeviceId={Id}",
@@ -148,17 +140,15 @@ public class NetLockSignalRService : IHostedService, IAsyncDisposable
         };
 
         // ── Disconnect handler — cancel all in-flight commands ────────────────
-        // When the connection closes (dropped, not graceful shutdown), every pending
-        // command will never get a response. Cancel all TCSes to unblock the HTTP callers.
+        // On unexpected connection close, every pending command will never receive a response.
+        // Cancel all pending TCSes to unblock the waiting HTTP request handlers.
         _connection.Closed += (exception) =>
         {
             _logger.LogWarning(exception,
                 "SignalR connection closed. Cancelling {Count} in-flight commands.",
                 _pendingCommands.Count);
 
-            // Iterate and cancel all pending commands.
-            // TryRemove is used because another thread might remove the same entry
-            // (e.g., a TTL expiry fires simultaneously).
+            // TryRemove is used because a TTL expiry may fire concurrently on the same entry.
             foreach (var kvp in _pendingCommands)
             {
                 if (_pendingCommands.TryRemove(kvp.Key, out var tcs))
@@ -206,26 +196,23 @@ public class NetLockSignalRService : IHostedService, IAsyncDisposable
                 "NetLock commandHub is not connected. Command cannot be dispatched.");
 
         // Step 1: Resolve device_id from access_key.
-        // WHY: The response callback delivers device_id, not access_key.
-        // We must register the TCS under device_id so we can look it up on response.
+        // The response callback delivers device_id, not access_key, so the TCS must be
+        // registered under device_id to be found when the response arrives.
         var deviceIdStr = await LookupDeviceIdAsync(deviceAccessKey);
 
         // Step 2: Enforce one-pending-command-per-device.
-        // ContainsKey is safe here because if there's a race between the check and TryAdd,
-        // the worst case is two commands for the same device — one will fail when its
-        // TCS is removed by the other. The TryAdd below is the actual guard.
+        // ContainsKey is a best-effort pre-check; the actual enforcement is the TryAdd below.
         if (_pendingCommands.ContainsKey(deviceIdStr))
             throw new InvalidOperationException(
                 $"A command is already pending for device {deviceAccessKey}. Wait for it to complete or time out.");
 
-        // Step 3: Create the TaskCompletionSource that will carry the response back.
+        // Step 3: Create the TaskCompletionSource that carries the response back.
         // RunContinuationsAsynchronously prevents the continuation from running on the
-        // SignalR receive thread, which could cause deadlocks.
+        // SignalR receive thread, which would risk deadlocks.
         var tcs = new TaskCompletionSource<string>(
             TaskCreationOptions.RunContinuationsAsynchronously);
 
-        // Step 4: Register TTL cleanup — prevents memory leak if device never responds.
-        // When the CancellationTokenSource fires, remove the TCS and cancel the task.
+        // Step 4: Register TTL cleanup to prevent a memory leak if the device never responds.
         using var cts = new CancellationTokenSource(timeout);
         cts.Token.Register(() =>
         {
@@ -240,30 +227,28 @@ public class NetLockSignalRService : IHostedService, IAsyncDisposable
         {
             // Step 5: Build and send the command to the NetLock hub.
             var payload = BuildRootEntity(deviceAccessKey, commandJson);
-            // URL-encode the JSON payload — NetLock expects it encoded.
+            // NetLock expects the payload URL-encoded.
             var encoded = Uri.EscapeDataString(JsonSerializer.Serialize(payload));
 
-            // "MessageReceivedFromWebconsole" is the NetLock hub method name.
-            // InvokeAsync sends the message and waits for the hub to acknowledge receipt
-            // (NOT for the device to respond — that comes via ReceiveClientResponseRemoteShell).
+            // InvokeAsync acknowledges receipt by the hub — the device response arrives
+            // separately via the ReceiveClientResponseRemoteShell callback.
             await _connection.InvokeAsync("MessageReceivedFromWebconsole", encoded);
 
-            // Step 6: Await the TCS — this suspends the async method until either:
-            //   a) ReceiveClientResponseRemoteShell fires and calls tcs.TrySetResult()
+            // Step 6: Await the TCS — suspends until either:
+            //   a) ReceiveClientResponseRemoteShell calls tcs.TrySetResult()
             //   b) The CancellationTokenSource fires and calls tcs.TrySetCanceled()
             return await tcs.Task;
         }
         catch (OperationCanceledException)
         {
-            // CancellationToken fired = timeout exceeded.
-            // Remove from dictionary (cleanup) and throw TimeoutException for the caller.
+            // CancellationToken fired — timeout exceeded.
             _pendingCommands.TryRemove(deviceIdStr, out _);
             throw new TimeoutException(
                 $"Command timed out after {timeout.TotalSeconds}s. Device: {deviceAccessKey}");
         }
         catch
         {
-            // Any other exception (SignalR disconnected, etc.) — clean up and re-throw.
+            // SignalR disconnected or other unexpected error — clean up and re-throw.
             _pendingCommands.TryRemove(deviceIdStr, out _);
             throw;
         }
@@ -271,11 +256,11 @@ public class NetLockSignalRService : IHostedService, IAsyncDisposable
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    // Builds the root JSON payload that NetLock's MessageReceivedFromWebconsole expects.
+    // Builds the root JSON payload for NetLock's MessageReceivedFromWebconsole.
     // Format: { admin_identity: { token }, target_device: { access_key }, command: {...} }
     private object BuildRootEntity(string deviceAccessKey, string commandJson)
     {
-        // Deserialize commandJson back to JsonElement so it's not double-serialized.
+        // Deserialise commandJson to JsonElement to avoid double-serialisation.
         var cmd = JsonSerializer.Deserialize<JsonElement>(commandJson);
         return new
         {
@@ -285,8 +270,8 @@ public class NetLockSignalRService : IHostedService, IAsyncDisposable
         };
     }
 
-    // Looks up the device's integer PK (id) from its access_key.
-    // This is needed because NetLock's response format uses device_id, not access_key.
+    // Resolves the device's integer PK from its access_key.
+    // Required because NetLock's response format delivers device_id, not access_key.
     private async Task<string> LookupDeviceIdAsync(string accessKey)
     {
         using var conn = await _factory.CreateConnectionAsync();
@@ -298,12 +283,11 @@ public class NetLockSignalRService : IHostedService, IAsyncDisposable
             throw new InvalidOperationException(
                 $"Device not found for access_key: {accessKey}");
 
-        // Return as string because _pendingCommands is ConcurrentDictionary<string, ...>
-        return id.Value.ToString();
+        return id.Value.ToString(); // _pendingCommands is keyed by string
     }
 
-    // Validates the admin session token is still valid by checking the accounts table.
-    // Called on reconnect — the token may have been rotated while we were disconnected.
+    // Validates that the admin session token is still present in the accounts table.
+    // Called on reconnect because the token may have been rotated during the outage.
     private async Task<bool> ValidateAdminTokenAsync(CancellationToken cancellationToken)
     {
         try
@@ -322,8 +306,7 @@ public class NetLockSignalRService : IHostedService, IAsyncDisposable
     }
 
     // ── IAsyncDisposable ─────────────────────────────────────────────────────
-    // Called when the service is being disposed (app shutdown).
-    // Disposes the HubConnection which closes the underlying WebSocket.
+    // Disposes the HubConnection, closing the underlying WebSocket on app shutdown.
 
     public async ValueTask DisposeAsync()
     {

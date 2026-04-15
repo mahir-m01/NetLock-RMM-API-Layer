@@ -3,12 +3,11 @@
 //
 // WHY this exists:
 // Every repository query must be filtered to the current tenant's data.
-// Instead of passing tenantId as a parameter to every function (verbose and error-prone),
-// we use a Scoped DI object that is set once by ApiKeyMiddleware and read by any service
-// that needs it. This is similar to using React Context or AsyncLocalStorage in TypeScript.
+// Rather than threading tenantId through every method signature, a Scoped DI object
+// is set once by ApiKeyMiddleware and read by any service that needs it.
 //
-// LIFETIME: Scoped — one instance per HTTP request. After the request ends, it's discarded.
-// ApiKeyMiddleware sets TenantId once at the start of each request pipeline.
+// LIFETIME: Scoped — one instance per HTTP request. Discarded when the request ends.
+// ApiKeyMiddleware sets TenantId once at the start of the pipeline.
 // Repositories, services, and the facade READ from it but never SET it.
 //
 // SECURITY: TenantId is set EXCLUSIVELY inside ApiKeyMiddleware from a database lookup.

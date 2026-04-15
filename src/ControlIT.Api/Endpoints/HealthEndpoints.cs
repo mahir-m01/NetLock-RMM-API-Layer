@@ -18,8 +18,6 @@ using ControlIT.Api.Domain.Interfaces;
 
 public static class HealthEndpoints
 {
-    // Map() is called from Program.cs to register all routes in this group.
-    // All endpoint classes follow this static Map(WebApplication) pattern.
     public static void Map(WebApplication app)
     {
         app.MapGet("/health", async (
@@ -44,7 +42,7 @@ public static class HealthEndpoints
             }
 
             // ── SignalR health check ──────────────────────────────────────────
-            // IsConnected checks the HubConnection.State directly — no DB call needed.
+            // Reads HubConnection.State directly — no DB call needed.
             components["signalr"] = endpoint.IsConnected ? "healthy" : "unhealthy";
             if (!endpoint.IsConnected) allHealthy = false;
 
@@ -81,7 +79,6 @@ public static class HealthEndpoints
                 ? Results.Json(response, statusCode: 503)
                 : Results.Ok(response);
         });
-        // Note: /health intentionally has NO RequireRateLimiting — it's exempt from auth
-        // and rate limiting so monitoring tools can poll freely.
+        // /health is intentionally exempt from rate limiting so monitoring tools can poll freely.
     }
 }

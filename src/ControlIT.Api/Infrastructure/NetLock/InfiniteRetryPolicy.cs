@@ -22,7 +22,7 @@ namespace ControlIT.Api.Infrastructure.NetLock;
 using Microsoft.AspNetCore.SignalR.Client;
 
 // IRetryPolicy is the SignalR interface for custom reconnection strategies.
-// Returning null from NextRetryDelay would STOP retrying — we never do that.
+// Returning null from NextRetryDelay stops all retries — this implementation never does that.
 public class InfiniteRetryPolicy : IRetryPolicy
 {
     // Maximum delay between retries. After the cap, each retry waits ~90s (+jitter).
@@ -39,8 +39,8 @@ public class InfiniteRetryPolicy : IRetryPolicy
         var cappedDelay = Math.Min(MaxDelay.TotalSeconds, rawDelay);
         var baseDelay = TimeSpan.FromSeconds(cappedDelay);
 
-        // ±20% jitter: multiply by a random factor between 0.8 and 1.2
-        // Random.Shared is thread-safe in .NET 6+ — no lock needed.
+        // ±20% jitter spreads reconnect attempts to prevent thundering-herd on hub restart.
+        // Random.Shared is thread-safe in .NET 6+.
         var jitterFactor = Random.Shared.NextDouble() * 0.4 - 0.2;
         var jitter = TimeSpan.FromMilliseconds(baseDelay.TotalMilliseconds * jitterFactor);
 

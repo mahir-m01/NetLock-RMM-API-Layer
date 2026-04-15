@@ -32,8 +32,6 @@ public class ControlItFacade
     private readonly IAuditService _audit;
     private readonly ILogger<ControlItFacade> _logger;
 
-    // All dependencies are injected via constructor — no service locator, no static access.
-    // Each dependency is an interface — the facade is decoupled from concrete implementations.
     public ControlItFacade(
         IDeviceRepository devices,
         IEventRepository events,
@@ -63,11 +61,9 @@ public class ControlItFacade
     {
         var (items, total) = await _devices.GetAllAsync(filter, tenant, ct);
 
-        // Compute online threshold once — avoids calling UtcNow per-device in the LINQ.
+        // Compute online threshold once to avoid calling UtcNow per-device in the projection.
         var onlineThreshold = DateTime.UtcNow.AddMinutes(-5);
 
-        // LINQ Select is equivalent to JavaScript's Array.map().
-        // Maps each Device domain model to a DeviceResponse DTO.
         var dtos = items.Select(d => new DeviceResponse
         {
             Id = d.Id,
@@ -98,7 +94,7 @@ public class ControlItFacade
         CancellationToken ct = default)
     {
         var d = await _devices.GetByIdAsync(id, tenant, ct);
-        // Return null (not throw) if device not found — endpoint returns 404.
+        // Null return signals "not found" — the endpoint maps this to 404.
         if (d is null) return null;
 
         var onlineThreshold = DateTime.UtcNow.AddMinutes(-5);
@@ -121,13 +117,11 @@ public class ControlItFacade
     public async Task<DashboardSummary> GetDashboardSummaryAsync(
         TenantContext tenant, CancellationToken ct = default)
     {
-        // GetAllAsync with PageSize=1 gets us the TotalCount without fetching all devices.
-        // SQL_CALC_FOUND_ROWS runs the count as part of the paginated query.
+        // PageSize=1 retrieves TotalCount via SQL_CALC_FOUND_ROWS without fetching all rows.
         var (_, totalDevices) = await _devices.GetAllAsync(
             new DeviceFilter { PageSize = 1 }, tenant, ct);
 
-        // MUST use a real COUNT query — never hardcode -1 or any placeholder.
-        // GetOnlineCountAsync uses last_access >= DATE_SUB(NOW(), INTERVAL 5 MINUTE).
+        // GetOnlineCountAsync issues SELECT COUNT(*) WHERE last_access >= DATE_SUB(NOW(), INTERVAL 5 MINUTE).
         var onlineCount = await _devices.GetOnlineCountAsync(tenant, ct);
 
         var (_, totalEvents) = await _events.GetAllAsync(tenant, 1, 0, ct);
@@ -135,7 +129,7 @@ public class ControlItFacade
         return new DashboardSummary
         {
             TotalDevices = totalDevices,
-            OnlineDevices = onlineCount,      // Real COUNT — never a placeholder
+            OnlineDevices = onlineCount,
             TotalTenants = 1,                 // Phase 1: single-tenant architecture
             TotalEvents = totalEvents,
             CriticalAlerts = 0               // Phase 2: Wazuh integration
@@ -155,8 +149,7 @@ public class ControlItFacade
             throw new InvalidOperationException(
                 "NetLock hub is not connected. Command dispatch unavailable.");
 
-        // Look up the device's access_key using the tenant-scoped ID.
-        // GetAccessKeyAsync returns null if the device doesn't exist in this tenant.
+        // GetAccessKeyAsync returns null if the device does not exist in this tenant's scope.
         var accessKey = await _devices.GetAccessKeyAsync(request.DeviceId, tenant, ct)
             ?? throw new KeyNotFoundException(
                 $"Device {request.DeviceId} not found in tenant scope.");
@@ -177,7 +170,6 @@ public class ControlItFacade
 
         return new PagedResult<EventResponse>
         {
-            // Map DeviceEvent domain models to EventResponse DTOs.
             Items = items.Select(e => new EventResponse
             {
                 Id = e.Id,

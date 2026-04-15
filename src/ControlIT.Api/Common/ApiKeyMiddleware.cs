@@ -31,20 +31,16 @@ public class ApiKeyMiddleware
 {
     private readonly RequestDelegate _next;
 
-    // IDbConnectionFactory is injected into the constructor because ApiKeyMiddleware
-    // is a Singleton (middleware classes are singletons in ASP.NET Core).
-    // We can't inject Scoped services directly into Singleton constructors — that's the
-    // "captive dependency" bug. IDbConnectionFactory is also Singleton, so this is safe.
+    // Middleware classes are Singleton in ASP.NET Core. IDbConnectionFactory is also Singleton,
+    // so constructor injection here is safe — no captive dependency risk.
     private readonly IDbConnectionFactory _factory;
     private readonly ILogger<ApiKeyMiddleware> _logger;
 
     // --- In-memory cache ---
-    // 5-minute TTL cache: avoids a DB query on every single request.
-    // After the first successful auth, each keyHash→(TenantId, Expiry) mapping is cached for 5 minutes.
-    // Using ConcurrentDictionary so every distinct API key gets its own entry — no single-entry
-    // bottleneck where two clients with different keys would evict each other's cached result.
-    // ConcurrentDictionary is inherently thread-safe; no lock is needed anywhere.
-    // This is per-process memory (not distributed) — works fine for a single-instance API.
+    // 5-minute TTL cache — avoids a DB hit on every request after the first successful auth.
+    // Keyed by key hash so distinct API keys never evict each other's cached result.
+    // ConcurrentDictionary provides thread-safe reads and writes without explicit locking.
+    // Per-process only — suitable for a single-instance deployment.
     private readonly ConcurrentDictionary<string, (int TenantId, DateTime Expiry)> _cache = new();
 
     public ApiKeyMiddleware(RequestDelegate next, IDbConnectionFactory factory,
@@ -56,9 +52,9 @@ public class ApiKeyMiddleware
     }
 
     /// <summary>
-    /// InvokeAsync receives a TenantContext via parameter injection — NOT constructor injection.
-    /// This is how ASP.NET Core middleware accesses Scoped services: through method parameters.
-    /// Each request gets a fresh TenantContext instance (Scoped = one per request).
+    /// TenantContext is injected via method parameter rather than constructor injection
+    /// because it is Scoped — method-level injection is how ASP.NET Core middleware
+    /// accesses Scoped services from a Singleton class.
     /// </summary>
     public async Task InvokeAsync(HttpContext context, TenantContext tenantContext)
     {
@@ -70,8 +66,7 @@ public class ApiKeyMiddleware
             return;
         }
 
-        // TryGetValue returns false if the header is absent — prevents KeyNotFoundException.
-        // In TypeScript: const rawKey = req.headers['x-api-key']
+        // TryGetValue returns false when the header is absent, avoiding a KeyNotFoundException.
         if (!context.Request.Headers.TryGetValue("x-api-key", out var rawKey)
             || string.IsNullOrWhiteSpace(rawKey))
         {
@@ -87,9 +82,6 @@ public class ApiKeyMiddleware
         // --- Cache check (thread-safe) ---
         int? tenantId = null;
 
-        // TryGetValue is atomic on ConcurrentDictionary — no lock required.
-        // Each API key maps to its own entry, so concurrent requests from different tenants
-        // never interfere with each other's cached result.
         if (_cache.TryGetValue(keyHash, out var cached) && DateTime.UtcNow < cached.Expiry)
             tenantId = cached.TenantId;
 
@@ -116,8 +108,7 @@ public class ApiKeyMiddleware
                 return;
             }
 
-            // Update the in-memory cache for the next 5 minutes.
-            // ConcurrentDictionary indexer assignment is thread-safe — no lock required.
+            // Cache the result for 5 minutes.
             _cache[keyHash] = (tenantId.Value, DateTime.UtcNow.AddMinutes(5));
         }
 
@@ -132,17 +123,13 @@ public class ApiKeyMiddleware
 
     /// <summary>
     /// Computes the SHA-256 hash of a string and returns it as lowercase hex.
-    /// This is the same algorithm used when seeding API keys into the database.
-    /// In Node.js: crypto.createHash('sha256').update(input).digest('hex')
+    /// Matches the algorithm used when seeding API keys into the database.
     /// </summary>
     private static string ComputeSha256(string input)
     {
-        // SHA256.HashData: one-shot hash computation (no need to manage a HashAlgorithm instance)
         var bytes = System.Security.Cryptography.SHA256.HashData(
             System.Text.Encoding.UTF8.GetBytes(input));
-
-        // Convert.ToHexString: bytes → uppercase hex string
-        // .ToLowerInvariant(): normalize to lowercase for consistent comparison
+        // ToLowerInvariant normalises to lowercase for consistent comparison.
         return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 }

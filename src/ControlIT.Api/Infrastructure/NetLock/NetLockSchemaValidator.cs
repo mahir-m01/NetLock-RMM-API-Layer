@@ -79,8 +79,7 @@ public class NetLockSchemaValidator : ISchemaValidator
     {
         _factory = factory;
         _logger = logger;
-        // Read the database name from config — defaults to "netlock".
-        // Used in the information_schema.COLUMNS query to scope to the right database.
+        // Scopes the information_schema.COLUMNS query to the correct database.
         _databaseName = config["Database:Name"] ?? "netlock";
     }
 
@@ -88,14 +87,11 @@ public class NetLockSchemaValidator : ISchemaValidator
     {
         using var conn = await _factory.CreateConnectionAsync(cancellationToken);
 
-        // Get the distinct list of tables we need to check.
         var tables = RequiredColumns.Select(c => c.Table).Distinct().ToArray();
 
         // Query information_schema.COLUMNS for all columns in the relevant tables.
-        // Dapper maps the result to value tuples (Table, Column).
-        // NOTE: Dapper tuple mapping requires exact column name aliases to match field names.
-        // Note: 'Table' is a reserved keyword in MySQL — must use backtick alias `TableName`
-        // and match the tuple field names accordingly.
+        // 'Table' is a reserved keyword in MySQL — the alias TableName avoids the conflict.
+        // Dapper tuple mapping requires the alias names to match the tuple field names exactly.
         var existing = (await conn.QueryAsync<(string TableName, string ColumnName)>(
             @"SELECT TABLE_NAME AS TableName, COLUMN_NAME AS ColumnName
               FROM information_schema.COLUMNS
@@ -105,7 +101,6 @@ public class NetLockSchemaValidator : ISchemaValidator
             .Select(r => (Table: r.TableName, Column: r.ColumnName))
             .ToHashSet();
 
-        // Find which required columns don't exist in the actual schema.
         var missing = RequiredColumns
             .Where(req => !existing.Contains(req))
             .ToList();
@@ -121,11 +116,10 @@ public class NetLockSchemaValidator : ISchemaValidator
                 "Update the Dapper queries and this validator's RequiredColumns list " +
                 "before restarting.";
 
-            // Log at Critical so it appears in production monitoring and alerts.
+            // LogCritical so the failure appears in production monitoring.
             _logger.LogCritical("{Message}", message);
 
-            // Throw to prevent the app from starting. The host will log the exception
-            // and exit — this is the intentional fail-fast behaviour.
+            // Throw to prevent the app from starting — intentional fail-fast behaviour.
             throw new InvalidOperationException(message);
         }
 

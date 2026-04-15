@@ -22,9 +22,6 @@ public class MySqlDeviceRepository : IDeviceRepository
 {
     private readonly IDbConnectionFactory _factory;
 
-    // Constructor injection — the DI container provides IDbConnectionFactory.
-    // This is the Dependency Inversion Principle: depend on the abstraction (interface),
-    // not the concrete class (MySqlConnectionFactory).
     public MySqlDeviceRepository(IDbConnectionFactory factory)
     {
         _factory = factory;
@@ -34,16 +31,14 @@ public class MySqlDeviceRepository : IDeviceRepository
         DeviceFilter filter, TenantContext tenantContext,
         CancellationToken cancellationToken = default)
     {
-        // Guard: TenantContext must be resolved (set by ApiKeyMiddleware) before any query.
-        // If IsResolved is false, the middleware didn't authenticate — this is a bug, not
-        // a user error. Throw rather than silently returning data for the wrong tenant.
+        // Guard: TenantContext must be resolved before any query. An unresolved context
+        // indicates a middleware configuration bug, not a user error.
         if (!tenantContext.IsResolved)
             throw new InvalidOperationException("TenantContext not resolved before repository access.");
 
         using var conn = await _factory.CreateConnectionAsync(cancellationToken);
 
-        // DynamicParameters is Dapper's way of building parameterized queries dynamically.
-        // Parameters are ALWAYS used (never string interpolation) to prevent SQL injection.
+        // Parameters are always bound via DynamicParameters — never string interpolation.
         var conditions = new List<string> { "d.tenant_id = @tenantId" };
         var p = new DynamicParameters();
         p.Add("tenantId", tenantContext.TenantId);
@@ -74,9 +69,8 @@ public class MySqlDeviceRepository : IDeviceRepository
         p.Add("pageSize", filter.PageSize);
         p.Add("offset", offset);
 
-        // SQL_CALC_FOUND_ROWS + FOUND_ROWS() is MySQL's way of getting the total count
-        // in the same query as the paginated results. Avoids a second COUNT(*) round-trip.
-        // QueryMultipleAsync executes both SELECT statements in one DB call.
+        // SQL_CALC_FOUND_ROWS + FOUND_ROWS() returns the total count alongside paginated results
+        // in a single round-trip, avoiding a separate COUNT(*) query.
         var sql = $"""
             SELECT SQL_CALC_FOUND_ROWS
                 d.id, d.tenant_id, d.location_id, d.device_name, d.access_key,
@@ -91,9 +85,6 @@ public class MySqlDeviceRepository : IDeviceRepository
             SELECT FOUND_ROWS();
             """;
 
-        // QueryMultipleAsync returns a "grid reader" — read each result set in order.
-        // ReadAsync<Device>() maps the first result set to Device objects.
-        // ReadSingleAsync<int>() reads the single integer from FOUND_ROWS().
         using var multi = await conn.QueryMultipleAsync(sql, p);
         var items = await multi.ReadAsync<Device>();
         var total = await multi.ReadSingleAsync<int>();
@@ -110,9 +101,8 @@ public class MySqlDeviceRepository : IDeviceRepository
 
         using var conn = await _factory.CreateConnectionAsync(cancellationToken);
 
-        // QueryFirstOrDefaultAsync returns the first matching row, or null if none found.
-        // The WHERE clause includes BOTH id AND tenant_id — this prevents a tenant from
-        // reading another tenant's devices by guessing an ID.
+        // WHERE includes both id AND tenant_id — prevents a tenant from accessing another
+        // tenant's devices by guessing a numeric ID.
         return await conn.QueryFirstOrDefaultAsync<Device>(
             """
             SELECT d.id, d.tenant_id, d.location_id, d.device_name, d.access_key,
@@ -135,9 +125,7 @@ public class MySqlDeviceRepository : IDeviceRepository
 
         using var conn = await _factory.CreateConnectionAsync(cancellationToken);
 
-        // ExecuteScalarAsync<T> is Dapper's shorthand for queries that return a single scalar value.
-        // last_access >= DATE_SUB(NOW(), INTERVAL 5 MINUTE) = "checked in within the last 5 minutes"
-        // This is a real COUNT — NEVER hardcode -1 or any placeholder value here.
+        // last_access >= DATE_SUB(NOW(), INTERVAL 5 MINUTE) defines "online" as checked in within 5 minutes.
         return await conn.ExecuteScalarAsync<int>(
             """
             SELECT COUNT(*)
@@ -157,9 +145,8 @@ public class MySqlDeviceRepository : IDeviceRepository
 
         using var conn = await _factory.CreateConnectionAsync(cancellationToken);
 
-        // access_key is the NetLock identifier used for SignalR dispatch.
-        // The tenant_id check ensures the caller can only get keys for their own devices.
-        // Returns null (not an exception) if not found — callers handle the null case.
+        // The tenant_id check ensures access_key can only be retrieved for devices within
+        // the caller's tenant. Returns null on not-found; callers handle the null case.
         return await conn.ExecuteScalarAsync<string?>(
             """
             SELECT access_key

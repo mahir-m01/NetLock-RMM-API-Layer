@@ -40,11 +40,11 @@ public class MySqlEventRepository : IEventRepository
 
         using var conn = await _factory.CreateConnectionAsync(cancellationToken);
 
-        // IMPORTANT: Both aliases are required on every query that touches these columns.
-        // `e.date AS Timestamp` — maps the `date` column to DeviceEvent.Timestamp
-        // `e._event AS Event`   — maps the `_event` column to DeviceEvent.Event
-        // The actual column is tenant_name_snapshot (not tenant_name) — verified against
-        // NetLock's Event_Handler.cs. The JOIN uses this column to filter by tenant.
+        // Both column aliases are required on every query touching these columns:
+        //   e.date AS Timestamp  — maps the `date` column to DeviceEvent.Timestamp
+        //   e._event AS Event    — maps the `_event` column to DeviceEvent.Event
+        // The tenant column is tenant_name_snapshot (verified against NetLock's Event_Handler.cs).
+        // The JOIN filters by tenant via the tenants table since events has no tenant_id column.
         var sql = """
             SELECT SQL_CALC_FOUND_ROWS
                 e.id, e.device_id, e.tenant_name_snapshot AS TenantName, e.device_name,
@@ -78,8 +78,8 @@ public class MySqlEventRepository : IEventRepository
 
         using var conn = await _factory.CreateConnectionAsync(cancellationToken);
 
-        // Count query for the dashboard summary. Same JOIN pattern as GetAllAsync —
-        // must filter via tenant name, not tenant_id directly.
+        // Same JOIN pattern as GetAllAsync — filters via tenant name because the events
+        // table has no tenant_id column.
         return await conn.ExecuteScalarAsync<int>(
             """
             SELECT COUNT(*)

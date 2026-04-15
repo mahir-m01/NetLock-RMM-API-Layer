@@ -27,7 +27,7 @@ public class MySqlTenantRepository : ITenantRepository
     {
         using var conn = await _factory.CreateConnectionAsync(cancellationToken);
 
-        // Simple query — no tenant scoping here because the endpoint is admin-level.
+        // No tenant scoping — this is an admin-level endpoint.
         // Phase 2: add role-based auth check.
         return await conn.QueryAsync<Tenant>(
             "SELECT id, guid, name FROM tenants ORDER BY name");
@@ -38,8 +38,7 @@ public class MySqlTenantRepository : ITenantRepository
     {
         using var conn = await _factory.CreateConnectionAsync(cancellationToken);
 
-        // QueryMultipleAsync sends two SQL statements in a single round-trip.
-        // The semicolon separates them — MySQL processes both and returns two result sets.
+        // Two SQL statements in a single round-trip — MySQL returns two result sets.
         using var multi = await conn.QueryMultipleAsync(
             """
             SELECT id, guid, name FROM tenants WHERE id = @id;
@@ -47,12 +46,9 @@ public class MySqlTenantRepository : ITenantRepository
             """,
             new { id });
 
-        // ReadFirstOrDefaultAsync reads the first result set and returns the first row, or null.
         var tenant = await multi.ReadFirstOrDefaultAsync<Tenant>();
         if (tenant is null) return null;
 
-        // Read the second result set (locations) and assign to the tenant.
-        // NEVER return with an empty Locations list — populate it here or throw.
         tenant.Locations = (await multi.ReadAsync<Location>()).ToList();
         return tenant;
     }

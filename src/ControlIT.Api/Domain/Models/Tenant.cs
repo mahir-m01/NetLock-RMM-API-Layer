@@ -22,9 +22,6 @@ public class Tenant
     // Display name of the tenant/organization
     public string Name { get; set; } = string.Empty;
 
-    // List of physical/logical locations belonging to this tenant.
-    // NOT a database column — populated via QueryMultipleAsync in the repository.
-    // In EF Core, this would be a navigation property. In Dapper, we do it manually.
-    // '[]' is C# shorthand for an empty List<Location> initializer (C# 12+).
+    // Not a database column — populated via QueryMultipleAsync in the repository.
     public List<Location> Locations { get; set; } = [];
 }

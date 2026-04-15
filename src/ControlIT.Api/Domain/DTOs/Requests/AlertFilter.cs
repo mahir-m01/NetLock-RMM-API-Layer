@@ -17,7 +17,6 @@ public class AlertFilter
     public bool? UnacknowledgedOnly { get; set; }
 
     // Start of the time range filter. Null = no lower bound.
-    // DateTime? in C# is the same as Date | undefined in TypeScript.
     public DateTime? From { get; set; }
 
     // End of the time range filter. Null = no upper bound.

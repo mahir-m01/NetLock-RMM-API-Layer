@@ -1,26 +1,56 @@
-# ControlIT
+# ControlIT - NetLock RMM API Layer
 
-A unified endpoint management API layer built on top of NetLock RMM, Netbird, and Wazuh. Built for managed service providers who need a single dashboard across multiple client environments — instead of logging into three separate tools per client.
+A REST API layer built on top of NetLock RMM. Phase 1 exposes NetLock's device data, real-time command dispatch, and audit logging through a clean typed API. ControlIT adds its own tables to the shared MySQL database for tenant API key management and audit trails.
 
-This repo is the integration layer. It reads from NetLock's database, dispatches commands through its SignalR hub, and serves everything through a clean REST API to a Next.js dashboard.
+This repo contains the ASP.NET Core API, the local Docker stack for running NetLock RMM, and a Debian Lima VM for testing the NetLock Linux agent.
+
+---
+
+## Architecture
+
+```mermaid
+graph TD
+    Client["Next.js Dashboard"]
+
+    subgraph ControlIT API Layer
+        MW["ApiKeyMiddleware\nauth + tenant derivation"]
+        Facade["ControlItFacade\nbusiness logic"]
+        Repos["Repositories\nIDeviceRepository\nIEventRepository\nITenantRepository"]
+        Audit["AuditService\nwrite-only audit log"]
+        Dispatcher["SignalRCommandDispatcher\ncommand transport"]
+    end
+
+    subgraph NetLock RMM
+        Hub["SignalR commandHub"]
+        DB["MySQL\nnetlockrmm + controlit_* tables"]
+        Agent["NetLock Agent\non managed device"]
+    end
+
+    Client -->|"x-api-key header"| MW
+    MW --> Facade
+    Facade --> Repos
+    Facade --> Dispatcher
+    Facade --> Audit
+    Repos -->|Dapper| DB
+    Audit -->|EF Core| DB
+    Dispatcher -->|SignalR| Hub
+    Hub -->|command| Agent
+    Agent -->|result| Hub
+    Hub -->|device_id nlocksep output| Dispatcher
+```
 
 ---
 
 ## What it does
 
-- Lists and details all managed endpoints across all client tenants
-- Dispatches remote commands to endpoints in real time via NetLock's SignalR hub
-- Tracks every action in a mandatory audit log (DPDP Act 2023 compliance)
-- Maps each physical device across NetLock, Netbird, and Wazuh into one unified identity
-- Enforces tenant isolation server-side — every query is scoped to the requesting tenant
+- Lists and filters managed endpoints across all client tenants
+- Dispatches remote shell commands to endpoints in real time via NetLock's SignalR hub
+- Correlates command responses by `device_id` - one pending command per device, 409 on collision
+- Enforces tenant isolation at every query - all data is scoped to the authenticated tenant
+- Maintains a full audit log for every command attempt (DPDP Act 2023)
+- Provides a dashboard summary with live online device counts
 
-Phase 1 covers NetLock RMM and Netbird. Wazuh SIEM integration is Phase 2.
-
----
-
-## System Overview
-
-![UC1 — Control IT Overall Use Case Diagram](diagrams/uc1-overall.png)
+Phase 1 covers NetLock RMM only. Netbird and Wazuh are Phase 2.
 
 ---
 
@@ -28,46 +58,64 @@ Phase 1 covers NetLock RMM and Netbird. Wazuh SIEM integration is Phase 2.
 
 | Layer | Technology |
 |---|---|
-| API runtime | ASP.NET Core 10 — Minimal APIs |
+| API runtime | ASP.NET Core 10 - Minimal APIs |
 | NetLock reads | Dapper + MySqlConnector |
 | ControlIT tables | EF Core + Pomelo |
 | Real-time commands | Microsoft.AspNetCore.SignalR.Client |
-| Dashboard | Next.js (TypeScript, App Router) |
 | Database | MySQL 8.0 (shared with NetLock) |
-| Reverse proxy | Caddy |
-| Containerisation | Docker Compose |
+| Auth | SHA-256 hashed API keys - tenant derived from DB, never from request |
+
+---
+
+## API Endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/health` | Service health - MySQL and SignalR status |
+| GET | `/devices` | Paginated device list with optional filters |
+| GET | `/devices/{id}` | Single device detail |
+| GET | `/dashboard` | Summary counts - total, online, events |
+| GET | `/events` | Paginated event log |
+| GET | `/tenants` | Tenant list |
+| POST | `/commands/execute` | Dispatch shell command to a device via SignalR |
+| GET | `/audit/logs` | Audit trail query with date range and pagination |
+
+---
+
+## Project Structure
+
+```
+NetLock-RMM-API-Layer/
+- src/ControlIT.Api/
+  - Application/       Facade, TenantContext, AuditService, Notifications
+  - Domain/            Interfaces, Models, DTOs
+  - Infrastructure/    MySql repositories, NetLock SignalR service, EF context
+  - Endpoints/         Minimal API route handlers
+  - Common/            Middleware (ApiKeyMiddleware, ErrorHandlingMiddleware)
+  - Migrations/        EF Core migrations for controlit_* tables
+- tests/ControlIT.Api.Tests/
+  - Unit/              SignalRCommandDispatcher, TenantContext
+  - Integration/       Health endpoint via WebApplicationFactory
+- diagrams/            UML diagrams - render on GitHub
+- docker-compose.yml   Local NetLock RMM stack
+- debian-test.yaml     Lima VM for local agent testing
+```
 
 ---
 
 ## Diagrams
 
-All diagrams are in the [`/diagrams`](diagrams/) folder and render on GitHub.
-
 | Diagram | Description |
 |---|---|
-| [UC1 — Overall System](diagrams/uc1-overall.md) | All actors and use cases across the full platform |
-| [UC2 — API Layer](diagrams/uc2-api-layer.md) | REST endpoints, middleware, and external integrations |
-| [Class Diagram — NetLock RMM](diagrams/class-01-netlockrmm.md) | OOP structure, interfaces, and design patterns |
-| [ER Diagram — NetLock RMM](diagrams/er-01-netlockrmm.md) | Database schema — NetLock tables and ControlIT owned tables |
-| [SEQ1 — Execute Command](diagrams/seq-01-execute-command.md) | Full flow for `POST /commands/execute` — API key validation, SignalR dispatch, responseId correlation, audit logging, timeout and disconnect error paths |
+| [UC1 - Overall System](diagrams/uc1-overall.md) | All actors and use cases across the full platform |
+| [UC2 - API Layer](diagrams/uc2-api-layer.md) | REST endpoints, middleware, and external integrations |
+| [Class Diagram](diagrams/class-01-netlockrmm.md) | OOP structure, interfaces, and design patterns |
+| [ER Diagram](diagrams/er-01-netlockrmm.md) | Database schema - NetLock tables and ControlIT owned tables |
+| [Sequence - Execute Command](diagrams/seq-01-execute-command.md) | Full flow for `POST /commands/execute` |
 
 ---
 
 ## Local Development
-
-This repo includes the local Docker stack for running NetLock RMM on Apple Silicon (M-series) via Colima.
-
-### Containers
-
-| Container | Image | Port | Purpose |
-|---|---|---|---|
-| `mysql-container` | `mysql:8.0` | `3306` | Database (native arm64) |
-| `netlock-rmm-server` | `nicomak101/netlock-rmm-server` | `7080` / `7082` | Backend — all server roles |
-| `netlock-rmm-web-console` | `nicomak101/netlock-rmm-web-console` | `8080` | Blazor admin web UI |
-
-> The two NetLock images are amd64-only and run under Rosetta 2 emulation via Colima's `--vz-rosetta` flag. MySQL runs natively on arm64.
->
-> The relay is on host port `7082` (not `7081`) because macOS SSH port forwarding holds `7081` on this machine.
 
 ### Prerequisites
 
@@ -82,66 +130,51 @@ mkdir -p ~/.docker/cli-plugins
 ln -sfn /opt/homebrew/opt/docker-compose/bin/docker-compose ~/.docker/cli-plugins/docker-compose
 ```
 
-### 1. Start Colima
+### Containers
 
-Run after every Mac restart — Colima does not auto-start:
+| Container | Image | Port | Purpose |
+|---|---|---|---|
+| `mysql-container` | `mysql:8.0` | `3306` | Database (native arm64) |
+| `netlock-rmm-server` | `nicomak101/netlock-rmm-server` | `7080` / `7082` | Backend |
+| `netlock-rmm-web-console` | `nicomak101/netlock-rmm-web-console` | `8080` | Blazor admin UI |
+
+The two NetLock images are amd64-only and run under Rosetta 2 emulation via Colima. MySQL runs natively on arm64.
+
+### Start Colima
+
+Run after every Mac restart:
 
 ```bash
 colima start --arch aarch64 --vm-type vz --vz-rosetta --cpu 4 --memory 6
 ```
 
-> Use `--vz-rosetta`, not `--rosetta`. The short flag does not exist in this version.
-
-| Flag | Why |
-|---|---|
-| `--arch aarch64` | Native ARM64 VM |
-| `--vm-type vz` | Apple Virtualization Framework — faster than QEMU |
-| `--vz-rosetta` | Rosetta 2 inside the VM for amd64 containers |
-| `--cpu 4` | Adjust to taste |
-| `--memory 6` | 6 GB needed for MySQL + two .NET containers |
-
-### 2. Configure your API key
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` and set `NETLOCK_API_KEY` from your NetLock members portal. The `appsettings.json` files in `config/` contain only structural defaults — all secrets come from `.env` at runtime.
-
-### 3. Start the stack
+### Start the stack
 
 ```bash
 docker compose up -d
 ```
 
-First run pulls around 350 MB. MySQL runs a healthcheck before the NetLock containers start — allow 2–3 minutes on first boot.
+Allow 2-3 minutes on first boot. MySQL runs a healthcheck before NetLock containers start.
+
+### Run the API
+
+```bash
+dotnet run --project src/ControlIT.Api/ControlIT.Api.csproj --launch-profile http
+```
 
 ### Access
 
-| Service | URL | Credentials |
-|---|---|---|
-| NetLock Web Console | http://localhost:8080 | `admin` / `admin` |
-| NetLock Server API | http://localhost:7080 | — |
-| MySQL | `localhost:3306` | root / see `.env` |
-
-### Useful commands
-
-```bash
-docker compose ps                          # check statuses
-docker compose logs -f                     # stream all logs
-docker compose logs -f netlock-rmm-server  # one container
-docker compose down                        # stop, preserve data
-docker compose pull && docker compose up -d  # pull latest
-
-# Full reset — wipes all data
-docker compose down -v && rm -rf data/mysql data/server data/web_console && docker compose up -d
-```
+| Service | URL |
+|---|---|
+| ControlIT API | http://localhost:5290 |
+| NetLock Web Console | http://localhost:8080 |
+| NetLock Server | http://localhost:7080 |
 
 ---
 
-## Test Agent — Debian Lima VM
+## Test Agent - Debian Lima VM
 
-A Debian 12 (ARM64) Lima VM is included for testing the NetLock Linux agent locally.
+A Debian 12 (ARM64) Lima VM for testing the NetLock Linux agent locally.
 
 ```bash
 brew install lima
@@ -149,31 +182,9 @@ limactl start debian-test.yaml
 limactl shell debian-test
 ```
 
-Inside the VM, download the installer from the NetLock web console at `http://localhost:8080`. Set all server fields to `192.168.5.2:7080` and relay to `192.168.5.2:7082`, then run the installer. The agent will appear in the console under your selected tenant.
+Inside the VM, download the installer from the NetLock web console at `http://localhost:8080`. Set server fields to `192.168.5.2:7080` and relay to `192.168.5.2:7082`. The agent will appear in the console under the selected tenant.
 
-> `192.168.5.2` is Lima's fixed host gateway — always resolves to your Mac from inside any Lima VM.
-
-```bash
-limactl stop debian-test
-limactl delete debian-test  # wipes disk
-```
-
----
-
-## Folder Structure
-
-```
-NetLock-RMM-API-Layer/
-├── docker-compose.yml
-├── debian-test.yaml            # Lima VM config for local agent testing
-├── .env                        # Secrets — gitignored, never commit
-├── .env.example                # Template — safe to commit
-├── config/
-│   ├── server/appsettings.json
-│   └── web_console/appsettings.json
-├── data/                       # Gitignored — written by containers at runtime
-└── diagrams/                   # UML diagrams — render on GitHub
-```
+`192.168.5.2` is Lima's fixed host gateway - always resolves to the Mac from inside any Lima VM.
 
 ---
 
@@ -185,17 +196,16 @@ mkdir -p ~/.docker/cli-plugins
 ln -sfn /opt/homebrew/opt/docker-compose/bin/docker-compose ~/.docker/cli-plugins/docker-compose
 ```
 
-**Cannot connect to Docker daemon** — Colima is not running:
+**Cannot connect to Docker daemon** - Colima is not running:
 ```bash
 colima start --arch aarch64 --vm-type vz --vz-rosetta --cpu 4 --memory 6
 ```
 
-**Web console error on first load** — MySQL is still initialising. Wait 60 seconds and refresh.
+**Web console error on first load** - MySQL is still initialising. Wait 60 seconds and refresh.
 
 **Port conflict on 8080 or 7080**
 ```bash
 lsof -i :8080
 ```
-Change the mapping in `docker-compose.yml` if needed (e.g. `"8081:80"`).
 
-**Slow performance on NetLock containers** — expected, they run under Rosetta 2 emulation. Deploy on a Linux x86\_64 host for production.
+**Slow NetLock containers** - Expected under Rosetta 2 emulation. Deploy on a Linux x86-64 host for production.

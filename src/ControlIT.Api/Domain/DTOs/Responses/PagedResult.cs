@@ -1,10 +1,8 @@
 // PagedResult.cs — Generic paginated response wrapper.
-// Pattern: Generic type (TypeScript generics work the same way: PagedResult<T>)
 //
-// WHY a generic wrapper instead of a one-off class per endpoint:
+// WHY a generic wrapper instead of one-off classes per endpoint:
 // Every list endpoint returns the same pagination metadata (total, page, size, totalPages).
-// By making this generic, we get type-safe pagination for devices, events, audits, etc.
-// In TypeScript: interface PagedResult<T> { items: T[]; totalCount: number; ... }
+// A single generic type provides type-safe pagination for devices, events, audits, etc.
 
 namespace ControlIT.Api.Domain.DTOs.Responses;
 
@@ -26,8 +24,7 @@ public class PagedResult<T>
     // How many items per page
     public int PageSize { get; set; }
 
-    // Computed property: how many pages exist in total.
-    // Math.Ceiling ensures partial pages are counted (e.g., 101 items / 25 per page = 5 pages)
-    // 'get' means this is read-only and computed on access — like a TypeScript getter.
+    // Computed from TotalCount and PageSize. Math.Ceiling ensures partial pages are counted
+    // (e.g., 101 items at 25 per page = 5 pages).
     public int TotalPages => (int)Math.Ceiling((double)TotalCount / PageSize);
 }

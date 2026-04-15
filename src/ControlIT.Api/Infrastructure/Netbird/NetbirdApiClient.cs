@@ -28,8 +28,6 @@ public class NetbirdApiClient : INetbirdClient
     private readonly HttpClient _http;
     private readonly ILogger<NetbirdApiClient> _logger;
 
-    // HttpClient is injected by IHttpClientFactory (via AddHttpClient<> in Program.cs).
-    // IOptions<NetbirdOptions> gives us the base URL and token from appsettings.
     public NetbirdApiClient(HttpClient http,
         IOptions<NetbirdOptions> options,
         ILogger<NetbirdApiClient> logger)
@@ -37,8 +35,7 @@ public class NetbirdApiClient : INetbirdClient
         _http = http;
         _logger = logger;
 
-        // Set the base address so we can use relative paths in each method.
-        // new Uri("https://example.com") — the trailing slash matters for relative resolution.
+        // Trailing slash is required for correct relative-path resolution.
         _http.BaseAddress = new Uri(options.Value.BaseUrl.TrimEnd('/') + "/");
 
         // CRITICAL: "Token" not "Bearer" — Netbird's API won't accept Bearer tokens.
@@ -54,8 +51,7 @@ public class NetbirdApiClient : INetbirdClient
         response.EnsureSuccessStatusCode();  // Throws HttpRequestException on 4xx/5xx
 
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
-        // PropertyNameCaseInsensitive = true maps JSON "name" → C# "Name", "id" → "Id", etc.
-        // The ?? [] means "return empty list if deserialization returns null".
+        // PropertyNameCaseInsensitive maps JSON "name" to "Name", "id" to "Id", etc.
         return JsonSerializer.Deserialize<IEnumerable<NetbirdPeer>>(json,
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
             ?? [];
@@ -66,8 +62,7 @@ public class NetbirdApiClient : INetbirdClient
     {
         var response = await _http.GetAsync($"/api/peers/{peerId}", cancellationToken);
 
-        // 404 = peer not found — return null instead of throwing.
-        // Callers use the null return to send a 404 from the endpoint.
+        // 404 means the peer is not found — return null so the endpoint can respond with 404.
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
 
         response.EnsureSuccessStatusCode();
@@ -81,7 +76,6 @@ public class NetbirdApiClient : INetbirdClient
         CancellationToken cancellationToken = default)
     {
         // POST /api/peers with { "setup_key": "<key>" }
-        // StringContent wraps the JSON string with the correct Content-Type header.
         var payload = new StringContent(
             JsonSerializer.Serialize(new { setup_key = setupKey }),
             System.Text.Encoding.UTF8,

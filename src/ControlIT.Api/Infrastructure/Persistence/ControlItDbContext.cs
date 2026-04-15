@@ -19,40 +19,30 @@ using ControlIT.Api.Domain.Models;
 
 public class ControlItDbContext : DbContext
 {
-    // DbContextOptions<T> is passed by the DI container (configured in Program.cs
-    // via builder.Services.AddDbContext<ControlItDbContext>(...)).
-    // This constructor signature is required by EF Core for DI injection.
     public ControlItDbContext(DbContextOptions<ControlItDbContext> options) : base(options) { }
 
-    // DbSet<T> is how you declare a table in EF Core.
-    // This is the ONLY table managed by this context — controlit_audit_log.
-    // The `=> Set<AuditEntry>()` pattern is a property accessor (not a field).
+    // The ONLY table managed by this context.
     public DbSet<AuditEntry> AuditLog => Set<AuditEntry>();
 
-    // OnModelCreating configures the database schema for EF Core migrations.
-    // Everything here maps to the controlit_audit_log table.
-    // Verify after running "dotnet ef migrations add" that the generated SQL
-    // touches ONLY controlit_* tables — if not, stop and investigate.
+    // Maps AuditEntry to the controlit_audit_log table with explicit column names and indexes.
+    // After running "dotnet ef migrations add", verify the generated SQL touches ONLY
+    // controlit_* tables.
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<AuditEntry>(entity =>
         {
-            // Map to the specific table name — EF would default to "AuditEntries" otherwise.
+            // Explicit table name — EF would default to "AuditEntries" without this.
             entity.ToTable("controlit_audit_log");
 
-            // Primary key — EF needs to know which column is the PK.
             entity.HasKey(e => e.Id);
-
-            // AUTO_INCREMENT — EF Core inserts without specifying Id; DB generates it.
             entity.Property(e => e.Id).ValueGeneratedOnAdd();
 
-            // Timestamp is set by the C# model (DateTime.UtcNow) — no DB-level default needed.
+            // Timestamp is set by the application layer (DateTime.UtcNow).
             // Pomelo's generated DEFAULT UTC_TIMESTAMP() syntax is invalid on MySQL 8.0,
-            // so we skip HasDefaultValueSql here and let the application layer supply the value.
+            // so HasDefaultValueSql is intentionally omitted.
 
-            // HasColumnName forces EF Core to use snake_case column names in MySQL.
-            // Without this, EF defaults to PascalCase (TenantId, ActorKeyId, etc.)
-            // which breaks all Dapper queries that expect snake_case column names.
+            // Explicit snake_case column names — EF defaults to PascalCase, which would
+            // break Dapper queries that expect snake_case column names.
             entity.Property(e => e.Id).HasColumnName("id");
             entity.Property(e => e.Timestamp).HasColumnName("timestamp");
             entity.Property(e => e.TenantId).HasColumnName("tenant_id");
@@ -64,9 +54,8 @@ public class ControlItDbContext : DbContext
             entity.Property(e => e.Result).HasColumnName("result").HasMaxLength(16);
             entity.Property(e => e.ErrorMessage).HasColumnName("error_message");
 
-            // Indexes — speed up the most common query patterns:
-            // (tenant_id, timestamp) for filtered date-range queries per tenant
-            // (actor_key_id) for "who did what" queries
+            // (tenant_id, timestamp) covers filtered date-range queries per tenant.
+            // (actor_key_id) covers "who did what" queries.
             entity.HasIndex(e => new { e.TenantId, e.Timestamp })
                   .HasDatabaseName("idx_audit_tenant_time");
             entity.HasIndex(e => e.ActorKeyId)

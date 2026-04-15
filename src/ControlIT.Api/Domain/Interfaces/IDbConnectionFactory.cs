@@ -9,9 +9,6 @@
 // ─────────────────────────────────────────────────────────────────────────────
 namespace ControlIT.Api.Domain.Interfaces;
 
-// In C#, interfaces define a "contract" — similar to TypeScript interfaces.
-// They're also the foundation of Dependency Injection: register the interface,
-// inject the interface, swap the concrete class without changing callers.
 public interface IDbConnectionFactory
 {
     // Returns an already-opened MySqlConnection. Caller is responsible for

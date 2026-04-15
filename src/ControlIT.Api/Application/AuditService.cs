@@ -23,18 +23,14 @@ public class AuditService : IAuditService
     private readonly AuditRepository _repo;
     private readonly ILogger<AuditService> _logger;
 
-    // Constructor injection — DI provides AuditRepository and ILogger.
-    // Note: AuditRepository is registered directly (not behind an interface) because
-    // it's an internal implementation detail — only AuditService uses it.
     public AuditService(AuditRepository repo, ILogger<AuditService> logger)
     {
         _repo = repo;
         _logger = logger;
     }
 
-    // The most important rule: this method must NEVER throw.
-    // All exceptions are caught and logged at Critical level, then swallowed.
-    // The caller continues executing regardless of whether the audit write succeeded.
+    // Implements the RecordAsync contract: must NEVER throw. All exceptions
+    // are caught, logged at Critical, and swallowed so the caller continues.
     public async Task RecordAsync(AuditEntry entry)
     {
         try
@@ -43,23 +39,22 @@ public class AuditService : IAuditService
         }
         catch (Exception ex)
         {
-            // LogCritical — this is a serious issue that needs immediate attention.
-            // In a production setup, Critical logs should trigger a PagerDuty alert.
-            // We log the Action and TenantId so the on-call engineer knows WHAT failed.
-            // We do NOT log sensitive data like the command content or API key.
+            // LogCritical so the event triggers on-call alerts.
+            // Action and TenantId are logged for triage. Sensitive fields (command, API key)
+            // are never included in log output.
             _logger.LogCritical(ex,
                 "AUDIT WRITE FAILED for Action={Action} TenantId={TenantId}. " +
                 "The operation will continue but this event has no audit trail.",
                 entry.Action, entry.TenantId);
-            // Exception is intentionally swallowed here — do NOT re-throw.
+            // Exception is intentionally swallowed — do NOT re-throw.
         }
     }
 
     public async Task<IEnumerable<AuditEntry>> QueryAsync(
         int tenantId, DateTime? from, DateTime? to, int limit, int offset)
     {
-        // Read path — delegates directly to the repository.
-        // No swallowing here: a failed read should return a proper error to the caller.
+        // Read path delegates directly to the repository.
+        // Exceptions propagate — a failed read should surface as an error to the caller.
         return await _repo.QueryAsync(tenantId, from, to, limit, offset);
     }
 }

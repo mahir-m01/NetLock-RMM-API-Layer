@@ -2,12 +2,11 @@
 // Pattern: DTO (Data Transfer Object)
 //
 // WHY a separate DTO instead of returning Device directly:
-// The Device model has sensitive fields (AccessKey) that the dashboard should never see.
-// A dedicated response DTO lets us control exactly what's exposed in the API contract.
-// This is the same reason you'd use a TypeScript "view model" or separate response type.
+// The Device model contains sensitive fields (AccessKey) that must not be exposed.
+// A dedicated DTO controls the exact API contract and decouples it from the domain model.
 //
-// The IsOnline field is COMPUTED by ControlItFacade — it's not stored in the DB.
-// It's true if LastAccess >= UtcNow - 5 minutes.
+// IsOnline is COMPUTED by ControlItFacade — it is not stored in the DB.
+// It is true when LastAccess >= UtcNow - 5 minutes.
 
 namespace ControlIT.Api.Domain.DTOs.Responses;
 
