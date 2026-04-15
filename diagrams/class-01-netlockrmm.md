@@ -18,14 +18,16 @@ classDiagram
 
     class IDeviceRepository {
         <<interface>>
-        +GetAllAsync(filter DeviceFilter, limit int, offset int, tenant TenantContext) Task~PagedResult~
-        +GetByIdAsync(id int, tenant TenantContext) Task~Device~
-        +GetOnlineCountAsync(tenant TenantContext) Task~int~
+        +GetAllAsync(filter DeviceFilter, tenant TenantContext, ct CancellationToken) Task~tuple~
+        +GetByIdAsync(id int, tenant TenantContext, ct CancellationToken) Task~Device~
+        +GetOnlineCountAsync(tenant TenantContext, ct CancellationToken) Task~int~
+        +GetAccessKeyAsync(deviceId int, tenant TenantContext, ct CancellationToken) Task~string~
     }
 
     class IEventRepository {
         <<interface>>
-        +GetAllAsync(filter EventFilter, limit int, offset int, tenant TenantContext) Task~PagedResult~
+        +GetAllAsync(tenant TenantContext, limit int, offset int, ct CancellationToken) Task~tuple~
+        +GetTotalCountAsync(tenant TenantContext, ct CancellationToken) Task~int~
     }
 
     class ITenantRepository {
@@ -37,7 +39,7 @@ classDiagram
 
     class ICommandDispatcher {
         <<interface>>
-        +DispatchAsync(deviceAccessKey string, commandJson string, timeout TimeSpan, ct CancellationToken) Task~string~
+        +DispatchAsync(deviceAccessKey string, request CommandRequest, ct CancellationToken) Task~CommandResult~
     }
 
     class IEndpointProvider {
@@ -162,16 +164,18 @@ classDiagram
         <<Repository>>
         -_factory IDbConnectionFactory
         -_logger ILogger
-        +GetAllAsync(filter DeviceFilter, limit int, offset int, tenant TenantContext) Task~PagedResult~
-        +GetByIdAsync(id int, tenant TenantContext) Task~Device~
-        +GetOnlineCountAsync(tenant TenantContext) Task~int~
+        +GetAllAsync(filter DeviceFilter, tenant TenantContext, ct CancellationToken) Task~tuple~
+        +GetByIdAsync(id int, tenant TenantContext, ct CancellationToken) Task~Device~
+        +GetOnlineCountAsync(tenant TenantContext, ct CancellationToken) Task~int~
+        +GetAccessKeyAsync(deviceId int, tenant TenantContext, ct CancellationToken) Task~string~
     }
 
     class MySqlEventRepository {
         <<Repository>>
         -_factory IDbConnectionFactory
         -_logger ILogger
-        +GetAllAsync(filter EventFilter, limit int, offset int, tenant TenantContext) Task~PagedResult~
+        +GetAllAsync(tenant TenantContext, limit int, offset int, ct CancellationToken) Task~tuple~
+        +GetTotalCountAsync(tenant TenantContext, ct CancellationToken) Task~int~
     }
 
     class MySqlTenantRepository {
@@ -184,8 +188,8 @@ classDiagram
     }
 
     class AuditRepository {
-        -_dbContext ControlItDbContext
-        +RecordAsync(entry AuditEntry) Task
+        -_factory IDbConnectionFactory
+        +InsertAsync(entry AuditEntry) Task
         +QueryAsync(tenantId int, from DateTime, to DateTime, limit int, offset int) Task~IEnumerable~AuditEntry~~
     }
 
@@ -204,24 +208,26 @@ classDiagram
     %% ─────────────────────────────────────────────
 
     class NetLockSignalRService {
-        -_connection HubConnection
         -_options NetLockOptions
+        -_factory IDbConnectionFactory
+        -_schemaValidator ISchemaValidator
+        -_logger ILogger
+        -_connection HubConnection
         %% Key = device_id (int PK as string) — one entry per device. 409 if device already pending.
         -_pendingCommands ConcurrentDictionary~string_TaskCompletionSource~
-        -_logger ILogger
         +IsConnected bool
         +StartAsync(ct CancellationToken) Task
         +StopAsync(ct CancellationToken) Task
         +InvokeCommandAsync(deviceAccessKey string, commandJson string, timeout TimeSpan) Task~string~
         -LookupDeviceIdAsync(accessKey string) Task~string~
         -BuildRootEntity(deviceAccessKey string, commandJson string) object
-        -OnReceiveClientResponseRemoteShell(result string) void
+        -ValidateAdminTokenAsync(ct CancellationToken) Task~bool~
     }
 
     class SignalRCommandDispatcher {
         -_signalR NetLockSignalRService
         -_logger ILogger
-        +DispatchAsync(deviceAccessKey string, commandJson string, timeout TimeSpan, ct CancellationToken) Task~string~
+        +DispatchAsync(deviceAccessKey string, request CommandRequest, ct CancellationToken) Task~CommandResult~
     }
 
     class NetLockEndpointProvider {
@@ -252,16 +258,17 @@ classDiagram
 
     class ControlItFacade {
         <<Facade>>
-        -_endpointProvider IEndpointProvider
-        -_deviceRepo IDeviceRepository
-        -_eventRepo IEventRepository
-        -_tenantRepo ITenantRepository
-        -_auditService IAuditService
+        -_devices IDeviceRepository
+        -_events IEventRepository
+        -_tenants ITenantRepository
+        -_commands ICommandDispatcher
+        -_endpoint IEndpointProvider
+        -_audit IAuditService
         -_logger ILogger
         +GetDevicesAsync(filter DeviceFilter, tenant TenantContext) Task~PagedResult~
         +GetDeviceByIdAsync(id int, tenant TenantContext) Task~Device~
-        +GetEventsAsync(filter EventFilter, tenant TenantContext) Task~PagedResult~
-        +ExecuteCommandAsync(request CommandRequest, tenant TenantContext) Task~string~
+        +GetEventsAsync(tenant TenantContext, page int, pageSize int) Task~PagedResult~
+        +ExecuteCommandAsync(request CommandRequest, tenant TenantContext) Task~CommandResult~
         +GetDashboardSummaryAsync(tenant TenantContext) Task~DashboardSummary~
     }
 
@@ -338,10 +345,11 @@ classDiagram
     %% ─────────────────────────────────────────────
 
     %% Facade depends on abstractions (Dependency Inversion)
-    ControlItFacade --> IEndpointProvider
     ControlItFacade --> IDeviceRepository
     ControlItFacade --> IEventRepository
     ControlItFacade --> ITenantRepository
+    ControlItFacade --> ICommandDispatcher
+    ControlItFacade --> IEndpointProvider
     ControlItFacade --> IAuditService
 
     %% NetLock infrastructure wiring
@@ -356,7 +364,7 @@ classDiagram
 
     %% Audit wiring
     AuditService --> AuditRepository
-    AuditRepository --> ControlItDbContext
+    AuditRepository --> IDbConnectionFactory
 
     %% Notification factory creates channels
     NotificationFactory --> INotificationChannel
