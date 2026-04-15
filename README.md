@@ -1,8 +1,8 @@
 # ControlIT - NetLock RMM API Layer
 
-A REST API layer built on top of NetLock RMM. Phase 1 exposes NetLock's device data, real-time command dispatch, and audit logging through a clean typed API. ControlIT adds its own tables to the shared MySQL database for tenant API key management and audit trails.
+ControlIT is a typed REST API layer built on top of NetLock RMM, designed for managed service providers who need programmatic access to their endpoint fleet without calling NetLock's internal APIs directly. It reads from NetLock's MySQL database, dispatches real-time commands through its SignalR hub, and adds its own tenant management and audit trail tables to the shared database.
 
-This repo contains the ASP.NET Core API, the local Docker stack for running NetLock RMM, and a Debian Lima VM for testing the NetLock Linux agent.
+This repo contains the ASP.NET Core API, the local Docker stack for running NetLock RMM on Apple Silicon, and a Debian Lima VM for agent testing.
 
 ---
 
@@ -38,6 +38,10 @@ graph TD
     Agent -->|result| Hub
     Hub -->|device_id nlocksep output| Dispatcher
 ```
+
+### Use Case Overview
+
+![UC1 - ControlIT Overall Use Case Diagram](diagrams/uc1-overall.png)
 
 ---
 
