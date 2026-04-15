@@ -25,4 +25,4 @@ All diagrams use Mermaid and render natively on GitHub.
 
 | Diagram | File | Description |
 |---------|------|-------------|
-| SEQ1 — Execute Command | [seq-01-execute-command.md](seq-01-execute-command.md) | Full flow for `POST /commands/execute`: API key validation, tenant resolution, SignalR dispatch, responseId correlation, audit logging, timeout and disconnect error paths |
+| SEQ1 — Execute Command | [seq-01-execute-command.md](seq-01-execute-command.md) | Full flow for `POST /commands/execute`: API key validation, tenant resolution, SignalR dispatch, device_id correlation, audit logging, timeout and disconnect error paths |

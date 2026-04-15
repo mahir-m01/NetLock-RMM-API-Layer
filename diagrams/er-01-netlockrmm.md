@@ -159,7 +159,7 @@ erDiagram
     %% Required for DPDP Act 2023 compliance before enterprise onboarding.
     tenants    ||--o{ controlit_audit_log   : "has many"
 
-    %% ControlIT: Phase 1 uses a single global key in appsettings.json.
+    %% ControlIT: Seed one row here before first run — see Contract 01 "First Run Setup".
     %% This table is created now to avoid a schema gap when Phase 2
     %% per-tenant key enforcement ships.
     tenants    ||--o{ controlit_tenant_api_keys    : "has many"

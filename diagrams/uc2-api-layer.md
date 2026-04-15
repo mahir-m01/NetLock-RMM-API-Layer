@@ -192,6 +192,6 @@ flowchart LR
 | Use Case | Type | Notes |
 |----------|------|-------|
 | Validate API Key | Cross-cutting | Every request except `/health` passes through `ApiKeyMiddleware`. `tenant_id` is NEVER trusted from the client — always derived server-side from the key lookup (P0 security fix). |
-| POST /commands/execute | Async only | HTTP POST triggers a SignalR invocation on NetLock `commandHub`. Response resolved via per-command GUID key in `_pendingCommands` (keyed by `responseId`, not `deviceAccessKey`). Max wait: 30s — then `Handle Command Timeout` fires. |
+| POST /commands/execute | Async only | HTTP POST triggers a SignalR invocation on NetLock `commandHub`. Response resolved by `device_id`-keyed `_pendingCommands` (NetLock callback delivers `"device_id>>nlocksep<<output"` — `device_id` is the only identifier returned; one pending command per device, 409 on collision). Max wait: 30s — then `Handle Command Timeout` fires. |
 | GET /devices (all Group 3) | Sync, tenant-scoped | `TenantContext` middleware enforces `WHERE tenant_id = ?` on every query. No device query can execute without a resolved tenant scope. |
 | GET /alerts/wazuh | Phase 2 | Requires Wazuh Manager deployed and REST API configured. `WazuhApiClient` registered in DI only when `Wazuh:Enabled = true`. |

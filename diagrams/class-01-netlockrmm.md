@@ -213,7 +213,8 @@ classDiagram
         +StartAsync(ct CancellationToken) Task
         +StopAsync(ct CancellationToken) Task
         +InvokeCommandAsync(deviceAccessKey string, commandJson string, timeout TimeSpan) Task~string~
-        -BuildRootEntity(deviceAccessKey string, commandJson string, responseId string) object
+        -LookupDeviceIdAsync(accessKey string) Task~string~
+        -BuildRootEntity(deviceAccessKey string, commandJson string) object
         -OnReceiveClientResponseRemoteShell(result string) void
     }
 
