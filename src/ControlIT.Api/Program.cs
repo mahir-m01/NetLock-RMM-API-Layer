@@ -31,6 +31,35 @@ DefaultTypeMap.MatchNamesWithUnderscores = true;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ── Environment variable overrides ───────────────────────────────────────────
+// Three explicit env vars that take precedence over appsettings values.
+// Useful for CI, Docker runs, and after a NetLock container restart that
+// regenerates the remote_session_token.
+//
+//   CONTROLIT_DB_CONNECTION     → ConnectionStrings:ControlIt
+//   CONTROLIT_NETLOCK_TOKEN     → NetLock:AdminSessionToken
+//   CONTROLIT_NETLOCK_HUB_URL   → NetLock:HubUrl
+//
+// Set any of these in shell before running `dotnet run` and they will win.
+// e.g.  export CONTROLIT_NETLOCK_TOKEN="<new token from refresh-token.sh>"
+var envOverrides = new Dictionary<string, string?>();
+
+var dbConn = Environment.GetEnvironmentVariable("CONTROLIT_DB_CONNECTION");
+if (!string.IsNullOrWhiteSpace(dbConn))
+    envOverrides["ConnectionStrings:ControlIt"] = dbConn;
+
+var netLockToken = Environment.GetEnvironmentVariable("CONTROLIT_NETLOCK_TOKEN");
+if (!string.IsNullOrWhiteSpace(netLockToken))
+    envOverrides["NetLock:AdminSessionToken"] = netLockToken;
+
+var netLockHub = Environment.GetEnvironmentVariable("CONTROLIT_NETLOCK_HUB_URL");
+if (!string.IsNullOrWhiteSpace(netLockHub))
+    envOverrides["NetLock:HubUrl"] = netLockHub;
+
+if (envOverrides.Count > 0)
+    builder.Configuration.AddInMemoryCollection(envOverrides);
+// ─────────────────────────────────────────────────────────────────────────────
+
 // ── CORS ────────────────────────────────────────────────────────────────────
 // AllowedOrigins is read from config so it can differ per environment.
 builder.Services.AddCors(options =>
