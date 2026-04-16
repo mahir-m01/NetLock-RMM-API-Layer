@@ -116,7 +116,7 @@ public class MySqlDeviceRepository : IDeviceRepository
             new { id, tenantId = tenantContext.TenantId });
     }
 
-    public async Task<int> GetOnlineCountAsync(
+    public async Task<IEnumerable<string>> GetAllAccessKeysAsync(
         TenantContext tenantContext,
         CancellationToken cancellationToken = default)
     {
@@ -125,13 +125,13 @@ public class MySqlDeviceRepository : IDeviceRepository
 
         using var conn = await _factory.CreateConnectionAsync(cancellationToken);
 
-        // last_access >= DATE_SUB(NOW(), INTERVAL 5 MINUTE) defines "online" as checked in within 5 minutes.
-        return await conn.ExecuteScalarAsync<int>(
+        // Lightweight query — only access_key. The facade intersects this with
+        // NetLock's live connected-device list to compute online count and IsOnline flags.
+        return await conn.QueryAsync<string>(
             """
-            SELECT COUNT(*)
+            SELECT access_key
             FROM devices
             WHERE tenant_id = @tenantId
-            AND last_access >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)
             """,
             new { tenantId = tenantContext.TenantId });
     }

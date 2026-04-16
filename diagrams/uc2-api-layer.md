@@ -86,6 +86,7 @@ flowchart LR
     %% ─────────────────────────────────────────────
 
     SignalR(["&lt;&lt;system&gt;&gt;\nNetLock SignalR Hub"])
+    NetLockAdmin(["&lt;&lt;system&gt;&gt;\nNetLock Admin REST\n/admin/devices/connected"])
     MySQL(["&lt;&lt;database&gt;&gt;\nMySQL Database"])
     NetbirdAPI(["&lt;&lt;external&gt;&gt;\nNetbird REST API"])
     WazuhAPI(["&lt;&lt;external&gt;&gt;\nWazuh REST API\n[Phase 2]"])
@@ -124,12 +125,15 @@ flowchart LR
     UCLogin --> MySQL
     UCRefresh --> MySQL
     UCListDev --> MySQL
+    UCListDev --> NetLockAdmin
     UCGetDev --> MySQL
+    UCGetDev --> NetLockAdmin
     UCMetrics --> Redis
     UCCompliance --> MySQL
     UCTenants --> MySQL
     UCCreateTenant --> MySQL
     UCExec --> MySQL
+    UCExec --> NetLockAdmin
     UCExec --> SignalR
     UCCmdResp --> SignalR
     UCEvents --> MySQL
@@ -193,5 +197,5 @@ flowchart LR
 |----------|------|-------|
 | Validate API Key | Cross-cutting | Every request except `/health` passes through `ApiKeyMiddleware`. `tenant_id` is NEVER trusted from the client — always derived server-side from the key lookup (P0 security fix). |
 | POST /commands/execute | Async only | HTTP POST triggers a SignalR invocation on NetLock `commandHub`. Response resolved by `device_id`-keyed `_pendingCommands` (NetLock callback delivers `"device_id>>nlocksep<<output"` — `device_id` is the only identifier returned; one pending command per device, 409 on collision). Max wait: 30s — then `Handle Command Timeout` fires. |
-| GET /devices (all Group 3) | Sync, tenant-scoped | `TenantContext` middleware enforces `WHERE tenant_id = ?` on every query. No device query can execute without a resolved tenant scope. |
+| GET /devices (all Group 3) | Sync, tenant-scoped | `TenantContext` middleware enforces `WHERE tenant_id = ?` on every query. `IsOnline` per device is resolved by calling NetLock's `GET /admin/devices/connected` (returns in-memory SignalR hub state) — same source NetLock's own web console uses. `last_access` is NOT used for online detection. |
 | GET /alerts/wazuh | Phase 2 | Requires Wazuh Manager deployed and REST API configured. `WazuhApiClient` registered in DI only when `Wazuh:Enabled = true`. |

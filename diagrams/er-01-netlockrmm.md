@@ -70,7 +70,7 @@ erDiagram
         string  tpm
         string  last_active_user
         string  environment_variables
-        string  last_access
+        string  last_access              "heartbeat ts — NOT used for online detection"
         int     authorized
         int     synced
     }

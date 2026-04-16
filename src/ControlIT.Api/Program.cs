@@ -37,8 +37,9 @@ var builder = WebApplication.CreateBuilder(args);
 // regenerates the remote_session_token.
 //
 //   CONTROLIT_DB_CONNECTION     → ConnectionStrings:ControlIt
-//   CONTROLIT_NETLOCK_TOKEN     → NetLock:AdminSessionToken
-//   CONTROLIT_NETLOCK_HUB_URL   → NetLock:HubUrl
+//   CONTROLIT_NETLOCK_TOKEN      → NetLock:AdminSessionToken  (remote_session_token for SignalR)
+//   CONTROLIT_NETLOCK_HUB_URL    → NetLock:HubUrl
+//   CONTROLIT_NETLOCK_FILES_KEY  → NetLock:FilesApiKey  (files_api_key for admin REST endpoints)
 //
 // Set any of these in shell before running `dotnet run` and they will win.
 // e.g.  export CONTROLIT_NETLOCK_TOKEN="<new token from refresh-token.sh>"
@@ -55,6 +56,10 @@ if (!string.IsNullOrWhiteSpace(netLockToken))
 var netLockHub = Environment.GetEnvironmentVariable("CONTROLIT_NETLOCK_HUB_URL");
 if (!string.IsNullOrWhiteSpace(netLockHub))
     envOverrides["NetLock:HubUrl"] = netLockHub;
+
+var netLockFilesKey = Environment.GetEnvironmentVariable("CONTROLIT_NETLOCK_FILES_KEY");
+if (!string.IsNullOrWhiteSpace(netLockFilesKey))
+    envOverrides["NetLock:FilesApiKey"] = netLockFilesKey;
 
 if (envOverrides.Count > 0)
     builder.Configuration.AddInMemoryCollection(envOverrides);
@@ -111,6 +116,15 @@ builder.Services.Configure<ControlIT.Api.Common.Configuration.WazuhOptions>(
     builder.Configuration.GetSection("Wazuh"));
 builder.Services.Configure<ControlIT.Api.Common.Configuration.DatabaseOptions>(
     builder.Configuration.GetSection("Database"));
+
+// ── HttpClient for NetLock admin API ─────────────────────────────────────
+// Named client "netlockadmin" — used by NetLockAdminClient to call
+// GET /admin/devices/connected. Singleton lifetime via IHttpClientFactory.
+builder.Services.AddHttpClient("netlockadmin");
+
+// WHY Singleton: NetLockAdminClient is stateless except for the base URL
+// and API key, which are read once from config and never change.
+builder.Services.AddSingleton<INetLockAdminClient, NetLockAdminClient>();
 
 // ── Infrastructure — Singleton ───────────────────────────────────────────
 // WHY Singleton: IDbConnectionFactory only holds a connection string (thread-safe).

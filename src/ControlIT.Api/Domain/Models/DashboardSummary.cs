@@ -28,4 +28,7 @@ public class DashboardSummary
     // Number of critical security alerts. Phase 1: always 0 (Wazuh not connected).
     // Phase 2: populated from Wazuh via IWazuhClient.
     public int CriticalAlerts { get; set; }
+
+    // When this summary was computed — DateTime.Now (local time, matches MySQL DateTimeKind.Unspecified).
+    public DateTime ServerTime { get; set; }
 }

@@ -30,6 +30,7 @@ public class ControlItFacade
     private readonly ICommandDispatcher _commands;
     private readonly IEndpointProvider _endpoint;
     private readonly IAuditService _audit;
+    private readonly INetLockAdminClient _netLockAdmin;
     private readonly ILogger<ControlItFacade> _logger;
 
     public ControlItFacade(
@@ -39,6 +40,7 @@ public class ControlItFacade
         ICommandDispatcher commands,
         IEndpointProvider endpoint,
         IAuditService audit,
+        INetLockAdminClient netLockAdmin,
         ILogger<ControlItFacade> logger)
     {
         _devices = devices;
@@ -47,6 +49,7 @@ public class ControlItFacade
         _commands = commands;
         _endpoint = endpoint;
         _audit = audit;
+        _netLockAdmin = netLockAdmin;
         _logger = logger;
     }
 
@@ -59,25 +62,32 @@ public class ControlItFacade
         DeviceFilter filter, TenantContext tenant,
         CancellationToken ct = default)
     {
-        var (items, total) = await _devices.GetAllAsync(filter, tenant, ct);
+        // Fetch devices and connected keys in parallel — both are read-only and independent.
+        var devicesTask      = _devices.GetAllAsync(filter, tenant, ct);
+        var connectedKeysTask = _netLockAdmin.GetConnectedAccessKeysAsync(ct);
+        await Task.WhenAll(devicesTask, connectedKeysTask);
 
-        // Compute online threshold once to avoid calling UtcNow per-device in the projection.
-        var onlineThreshold = DateTime.UtcNow.AddMinutes(-5);
+        var (items, total) = devicesTask.Result;
+        var connected       = connectedKeysTask.Result;
 
-        var dtos = items.Select(d => new DeviceResponse
+        var dtos = items.Select(d =>
         {
-            Id = d.Id,
-            DeviceName = d.DeviceName,
-            Platform = d.Platform,
-            OperatingSystem = d.OperatingSystem,
-            IpAddressInternal = d.IpAddressInternal,
-            CpuUsage = d.CpuUsage,
-            RamUsage = d.RamUsage,
-            // IsOnline: true if the device checked in within the last 5 minutes.
-            // This is computed in the application layer, not in SQL, so the definition
-            // of "online" can be changed without a DB migration.
-            IsOnline = d.LastAccess >= onlineThreshold,
-            LastAccess = d.LastAccess
+            // IsOnline: device's access_key is in NetLock's live SignalR connection set.
+            // Same source NetLock's own web console uses — instant disconnect detection.
+            var isOnline = connected.Contains(d.AccessKey);
+            return new DeviceResponse
+            {
+                Id = d.Id,
+                DeviceName = d.DeviceName,
+                Platform = d.Platform,
+                OperatingSystem = d.OperatingSystem,
+                IpAddressInternal = d.IpAddressInternal,
+                IsOnline = isOnline,
+                // Null out resource metrics when offline — stale values are misleading.
+                CpuUsage = isOnline ? d.CpuUsage : null,
+                RamUsage = isOnline ? d.RamUsage : null,
+                LastAccess = d.LastAccess
+            };
         });
 
         return new PagedResult<DeviceResponse>
@@ -97,7 +107,9 @@ public class ControlItFacade
         // Null return signals "not found" — the endpoint maps this to 404.
         if (d is null) return null;
 
-        var onlineThreshold = DateTime.UtcNow.AddMinutes(-5);
+        var connected = await _netLockAdmin.GetConnectedAccessKeysAsync(ct);
+        var isOnline  = connected.Contains(d.AccessKey);
+
         return new DeviceResponse
         {
             Id = d.Id,
@@ -105,9 +117,9 @@ public class ControlItFacade
             Platform = d.Platform,
             OperatingSystem = d.OperatingSystem,
             IpAddressInternal = d.IpAddressInternal,
-            CpuUsage = d.CpuUsage,
-            RamUsage = d.RamUsage,
-            IsOnline = d.LastAccess >= onlineThreshold,
+            IsOnline = isOnline,
+            CpuUsage = isOnline ? d.CpuUsage : null,
+            RamUsage = isOnline ? d.RamUsage : null,
             LastAccess = d.LastAccess
         };
     }
@@ -117,22 +129,31 @@ public class ControlItFacade
     public async Task<DashboardSummary> GetDashboardSummaryAsync(
         TenantContext tenant, CancellationToken ct = default)
     {
-        // PageSize=1 retrieves TotalCount via SQL_CALC_FOUND_ROWS without fetching all rows.
-        var (_, totalDevices) = await _devices.GetAllAsync(
-            new DeviceFilter { PageSize = 1 }, tenant, ct);
+        // Run all three independent reads in parallel.
+        var devicesTask      = _devices.GetAllAsync(new DeviceFilter { PageSize = 1 }, tenant, ct);
+        var accessKeysTask   = _devices.GetAllAccessKeysAsync(tenant, ct);
+        var connectedKeysTask = _netLockAdmin.GetConnectedAccessKeysAsync(ct);
+        var eventsTask       = _events.GetAllAsync(tenant, 1, 0, ct);
 
-        // GetOnlineCountAsync issues SELECT COUNT(*) WHERE last_access >= DATE_SUB(NOW(), INTERVAL 5 MINUTE).
-        var onlineCount = await _devices.GetOnlineCountAsync(tenant, ct);
+        await Task.WhenAll(devicesTask, accessKeysTask, connectedKeysTask, eventsTask);
 
-        var (_, totalEvents) = await _events.GetAllAsync(tenant, 1, 0, ct);
+        var (_, totalDevices) = devicesTask.Result;
+        var (_, totalEvents)  = eventsTask.Result;
+
+        // Online count: tenant devices whose access_key is in NetLock's live connection set.
+        // This is exactly how NetLock's own web console computes online status.
+        var connected   = connectedKeysTask.Result;
+        var allKeys     = accessKeysTask.Result;
+        var onlineCount = allKeys.Count(k => connected.Contains(k));
 
         return new DashboardSummary
         {
-            TotalDevices = totalDevices,
+            TotalDevices  = totalDevices,
             OnlineDevices = onlineCount,
-            TotalTenants = 1,                 // Phase 1: single-tenant architecture
-            TotalEvents = totalEvents,
-            CriticalAlerts = 0               // Phase 2: Wazuh integration
+            TotalTenants  = 1,    // Phase 1: single-tenant architecture
+            TotalEvents   = totalEvents,
+            CriticalAlerts = 0,   // Phase 2: Wazuh integration
+            ServerTime    = DateTime.UtcNow
         };
     }
 
@@ -149,14 +170,22 @@ public class ControlItFacade
             throw new InvalidOperationException(
                 "NetLock hub is not connected. Command dispatch unavailable.");
 
-        // GetAccessKeyAsync returns null if the device does not exist in this tenant's scope.
-        var accessKey = await _devices.GetAccessKeyAsync(request.DeviceId, tenant, ct)
+        // Fetch the full device — confirms it exists in this tenant's scope and
+        // gives us last_access to check online status before wasting a SignalR round-trip.
+        var device = await _devices.GetByIdAsync(request.DeviceId, tenant, ct)
             ?? throw new KeyNotFoundException(
                 $"Device {request.DeviceId} not found in tenant scope.");
 
+        // Pre-flight: reject immediately if the device is not connected to NetLock's hub.
+        // Uses the same live connection set as the devices list — instant accuracy.
+        var connected = await _netLockAdmin.GetConnectedAccessKeysAsync(ct);
+        if (!connected.Contains(device.AccessKey))
+            throw new InvalidOperationException(
+                $"Device '{device.DeviceName}' is offline (last seen: {device.LastAccess:u}). Command not dispatched.");
+
         // Dispatch the command via the injected dispatcher (SignalRCommandDispatcher).
         // Throws TimeoutException or InvalidOperationException on failure.
-        return await _commands.DispatchAsync(accessKey, request, ct);
+        return await _commands.DispatchAsync(device.AccessKey, request, ct);
     }
 
     // ── Events ────────────────────────────────────────────────────────────────

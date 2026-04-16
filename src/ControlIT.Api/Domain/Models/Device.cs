@@ -61,7 +61,6 @@ public class Device
     public string IpAddressExternal { get; set; } = string.Empty;
 
     // Timestamp of the last heartbeat/check-in from the agent
-    // Used to determine if a device is "online" (last_access within the last 5 minutes)
     public DateTime LastAccess { get; set; }
 
     // Whether the device has been authorized by an admin in NetLock

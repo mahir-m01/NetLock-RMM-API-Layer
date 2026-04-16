@@ -6,7 +6,11 @@
 // A dedicated DTO controls the exact API contract and decouples it from the domain model.
 //
 // IsOnline is COMPUTED by ControlItFacade — it is not stored in the DB.
-// It is true when LastAccess >= UtcNow - 5 minutes.
+// It is true when LastAccess >= DateTime.Now.AddMinutes(-5).
+//
+// CpuUsage / RamUsage are nullable: when IsOnline = false the agent is not
+// heartbeating so those values are stale/meaningless. Null tells the UI to
+// show "—" rather than a misleading number.
 
 namespace ControlIT.Api.Domain.DTOs.Responses;
 
@@ -22,13 +26,13 @@ public class DeviceResponse
     public string OperatingSystem { get; set; } = string.Empty;
     public string IpAddressInternal { get; set; } = string.Empty;
 
-    // Current CPU usage percentage (0.0 - 100.0)
-    public double CpuUsage { get; set; }
+    // Null when IsOnline = false — stale agent data is not meaningful when offline.
+    public double? CpuUsage { get; set; }
 
-    // Current RAM usage percentage (0.0 - 100.0)
-    public double RamUsage { get; set; }
+    // Null when IsOnline = false — stale agent data is not meaningful when offline.
+    public double? RamUsage { get; set; }
 
-    // Computed in ControlItFacade: true if LastAccess >= DateTime.UtcNow.AddMinutes(-5)
+    // Computed in ControlItFacade: true if LastAccess >= DateTime.Now.AddMinutes(-5).
     // This field does NOT exist in the database — it's calculated per-request.
     public bool IsOnline { get; set; }
 

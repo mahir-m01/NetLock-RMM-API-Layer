@@ -20,8 +20,13 @@ classDiagram
         <<interface>>
         +GetAllAsync(filter DeviceFilter, tenant TenantContext, ct CancellationToken) Task~tuple~
         +GetByIdAsync(id int, tenant TenantContext, ct CancellationToken) Task~Device~
-        +GetOnlineCountAsync(tenant TenantContext, ct CancellationToken) Task~int~
+        +GetAllAccessKeysAsync(tenant TenantContext, ct CancellationToken) Task~IEnumerable~string~~
         +GetAccessKeyAsync(deviceId int, tenant TenantContext, ct CancellationToken) Task~string~
+    }
+
+    class INetLockAdminClient {
+        <<interface>>
+        +GetConnectedAccessKeysAsync(ct CancellationToken) Task~IReadOnlySet~string~~
     }
 
     class IEventRepository {
@@ -166,7 +171,7 @@ classDiagram
         -_logger ILogger
         +GetAllAsync(filter DeviceFilter, tenant TenantContext, ct CancellationToken) Task~tuple~
         +GetByIdAsync(id int, tenant TenantContext, ct CancellationToken) Task~Device~
-        +GetOnlineCountAsync(tenant TenantContext, ct CancellationToken) Task~int~
+        +GetAllAccessKeysAsync(tenant TenantContext, ct CancellationToken) Task~IEnumerable~string~~
         +GetAccessKeyAsync(deviceId int, tenant TenantContext, ct CancellationToken) Task~string~
     }
 
@@ -264,12 +269,21 @@ classDiagram
         -_commands ICommandDispatcher
         -_endpoint IEndpointProvider
         -_audit IAuditService
+        -_netLockAdmin INetLockAdminClient
         -_logger ILogger
         +GetDevicesAsync(filter DeviceFilter, tenant TenantContext) Task~PagedResult~
         +GetDeviceByIdAsync(id int, tenant TenantContext) Task~Device~
         +GetEventsAsync(tenant TenantContext, page int, pageSize int) Task~PagedResult~
         +ExecuteCommandAsync(request CommandRequest, tenant TenantContext) Task~CommandResult~
         +GetDashboardSummaryAsync(tenant TenantContext) Task~DashboardSummary~
+    }
+
+    class NetLockAdminClient {
+        <<HttpClient>>
+        -_http HttpClient
+        -_baseUrl string
+        -_logger ILogger
+        +GetConnectedAccessKeysAsync(ct CancellationToken) Task~IReadOnlySet~string~~
     }
 
     class AuditService {
@@ -345,12 +359,15 @@ classDiagram
     %% ─────────────────────────────────────────────
 
     %% Facade depends on abstractions (Dependency Inversion)
+    INetLockAdminClient <|.. NetLockAdminClient
+
     ControlItFacade --> IDeviceRepository
     ControlItFacade --> IEventRepository
     ControlItFacade --> ITenantRepository
     ControlItFacade --> ICommandDispatcher
     ControlItFacade --> IEndpointProvider
     ControlItFacade --> IAuditService
+    ControlItFacade --> INetLockAdminClient
 
     %% NetLock infrastructure wiring
     NetLockEndpointProvider --> NetLockSignalRService

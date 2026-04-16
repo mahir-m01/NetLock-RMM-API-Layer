@@ -25,9 +25,9 @@ public interface IDeviceRepository
         int id, TenantContext tenantContext,
         CancellationToken cancellationToken = default);
 
-    // Returns the real-time count of online devices. Uses last_access threshold.
-    // MUST be a real COUNT query — never return a hardcoded placeholder.
-    Task<int> GetOnlineCountAsync(
+    // Returns all access_keys for the tenant's devices.
+    // Used by ControlItFacade to intersect with NetLock's live connected-device list.
+    Task<IEnumerable<string>> GetAllAccessKeysAsync(
         TenantContext tenantContext,
         CancellationToken cancellationToken = default);
 
