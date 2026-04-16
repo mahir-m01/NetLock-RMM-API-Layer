@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# refresh-token.sh — Sync the NetLock remote_session_token into appsettings.Development.json
+# refresh-token.sh — Sync the NetLock remote_session_token into dotnet user-secrets
 #
 # NetLock regenerates remote_session_token in the accounts table on every container
 # restart. Run this script from the repo root after any Docker restart:
@@ -8,14 +8,14 @@
 #
 # The script:
 #   1. Reads remote_session_token from MySQL via docker exec (no host credentials needed)
-#   2. Patches NetLock:AdminSessionToken in appsettings.Development.json
-#   3. Prints a confirmation with the first 6 characters of the token masked
+#   2. Writes NetLock:AdminSessionToken to dotnet user-secrets (Development only)
+#   3. Prints a confirmation with the first 6 characters of the token
 
 set -euo pipefail
 
 CONTAINER="mysql-container"
 DB="iphbmh"
-APPSETTINGS="$(cd "$(dirname "$0")/.." && pwd)/src/ControlIT.Api/appsettings.Development.json"
+PROJECT="$(cd "$(dirname "$0")/.." && pwd)/src/ControlIT.Api/ControlIT.Api.csproj"
 
 # ── Fetch token from running container ───────────────────────────────────────
 TOKEN=$(docker exec "$CONTAINER" \
@@ -29,19 +29,10 @@ if [[ -z "$TOKEN" ]]; then
   exit 1
 fi
 
-# ── Patch appsettings.Development.json ───────────────────────────────────────
-# Uses sed to replace the AdminSessionToken value in-place.
-# Matches:  "AdminSessionToken": "<anything>"
-# Handles tokens that contain special sed characters by escaping & / \ in the value.
-ESCAPED_TOKEN=$(printf '%s\n' "$TOKEN" | sed 's/[&/\]/\\&/g')
-
-sed -i.bak \
-  "s|\"AdminSessionToken\":.*|\"AdminSessionToken\": \"${ESCAPED_TOKEN}\"|" \
-  "$APPSETTINGS"
-
-rm -f "${APPSETTINGS}.bak"
+# ── Write token to dotnet user-secrets ───────────────────────────────────────
+dotnet user-secrets set "NetLock:AdminSessionToken" "$TOKEN" --project "$PROJECT"
 
 # ── Confirmation — show only first 6 chars ───────────────────────────────────
 MASKED="${TOKEN:0:6}..."
-echo "Token refreshed. AdminSessionToken set to: ${MASKED}"
-echo "File updated: $APPSETTINGS"
+echo "Token refreshed. NetLock:AdminSessionToken set to: ${MASKED}"
+echo "Stored in: dotnet user-secrets (project: $PROJECT)"
