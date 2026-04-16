@@ -2,10 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { Settings, Menu } from "lucide-react";
+import { Settings } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { getHealth } from "@/lib/api";
-import { saveApiKey, readApiKey } from "@/lib/api";
+import { getHealth, saveApiKey, readApiKey } from "@/lib/api";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -85,16 +84,7 @@ export function Topbar() {
   return (
     <header className="flex h-14 items-center justify-between border-b border-[rgba(107,148,193,0.18)] bg-[#001D35] px-4">
       <div className="flex items-center gap-3">
-        <SidebarTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-[#85AFDD] hover:bg-[#003257] hover:text-[#E9F1FF]"
-            aria-label="Toggle sidebar"
-          >
-            <Menu className="h-4 w-4" />
-          </Button>
-        </SidebarTrigger>
+        <SidebarTrigger className="h-8 w-8 text-[#85AFDD] hover:bg-[#003257] hover:text-[#E9F1FF]" />
         <h1 className="text-sm font-semibold text-[#E9F1FF]">{title}</h1>
       </div>
 
