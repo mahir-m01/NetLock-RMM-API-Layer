@@ -49,10 +49,10 @@ function SkeletonRows({ count }: { count: number }) {
   return (
     <>
       {Array.from({ length: count }).map((_, i) => (
-        <TableRow key={i} className="border-[rgba(107,148,193,0.18)]">
+        <TableRow key={i} className="border-border">
           {Array.from({ length: 5 }).map((_, j) => (
             <TableCell key={j}>
-              <Skeleton className="h-4 w-full bg-[#1B4972]" />
+              <Skeleton className="h-4 w-full bg-muted" />
             </TableCell>
           ))}
         </TableRow>
@@ -77,7 +77,7 @@ export default function DevicesPage() {
     queryFn: () => getDevices(page, PAGE_SIZE, filters),
   });
 
-  const totalPages = data ? Math.ceil(data.total / PAGE_SIZE) : 1;
+  const totalPages = data ? Math.ceil(data.totalCount / PAGE_SIZE) : 1;
 
   function handleSearch(e: React.ChangeEvent<HTMLInputElement>) {
     setSearch(e.target.value);
@@ -97,18 +97,18 @@ export default function DevicesPage() {
           placeholder="Search by name..."
           value={search}
           onChange={handleSearch}
-          className="max-w-xs border-[rgba(107,148,193,0.18)] bg-[#1B4972] text-[#E9F1FF] placeholder:text-[#85AFDD]"
+          className="max-w-xs border-border bg-muted text-foreground placeholder:text-muted-foreground"
         />
         <Select value={platform} onValueChange={handlePlatform}>
-          <SelectTrigger className="w-40 border-[rgba(107,148,193,0.18)] bg-[#1B4972] text-[#E9F1FF]">
+          <SelectTrigger className="w-40 border-border bg-muted text-foreground">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent className="border-[rgba(107,148,193,0.18)] bg-[#003257] text-[#E9F1FF]">
+          <SelectContent className="border-border bg-card text-foreground">
             {PLATFORMS.map((p) => (
               <SelectItem
                 key={p}
                 value={p}
-                className="focus:bg-[#1B4972] focus:text-[#E9F1FF]"
+                className="focus:bg-muted focus:text-foreground"
               >
                 {p}
               </SelectItem>
@@ -124,43 +124,43 @@ export default function DevicesPage() {
       )}
 
       {/* Table */}
-      <div className="overflow-x-auto rounded-lg border border-[rgba(107,148,193,0.18)] bg-[#003257]">
+      <div className="overflow-x-auto rounded-lg border border-border bg-card">
         <Table>
           <TableHeader>
-            <TableRow className="border-[rgba(107,148,193,0.18)] hover:bg-transparent">
-              <TableHead className="text-[#85AFDD]">ID</TableHead>
-              <TableHead className="text-[#85AFDD]">Device Name</TableHead>
-              <TableHead className="text-[#85AFDD]">Platform</TableHead>
-              <TableHead className="text-[#85AFDD]">Status</TableHead>
-              <TableHead className="text-[#85AFDD]">Actions</TableHead>
+            <TableRow className="border-border hover:bg-transparent">
+              <TableHead className="text-muted-foreground">ID</TableHead>
+              <TableHead className="text-muted-foreground">Device Name</TableHead>
+              <TableHead className="text-muted-foreground">Platform</TableHead>
+              <TableHead className="text-muted-foreground">Status</TableHead>
+              <TableHead className="text-muted-foreground">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               <SkeletonRows count={10} />
-            ) : data?.data.length === 0 ? (
-              <TableRow className="border-[rgba(107,148,193,0.18)]">
+            ) : data?.items.length === 0 ? (
+              <TableRow className="border-border">
                 <TableCell
                   colSpan={5}
-                  className="py-10 text-center text-[#85AFDD]"
+                  className="py-10 text-center text-muted-foreground"
                 >
                   No devices found.
                 </TableCell>
               </TableRow>
             ) : (
-              data?.data.map((device: Device) => (
+              data?.items.map((device: Device) => (
                 <TableRow
                   key={device.id}
-                  className="cursor-pointer border-[rgba(107,148,193,0.18)] hover:bg-[#1B4972]"
+                  className="cursor-pointer border-border hover:bg-muted"
                   onClick={() => router.push(`/devices/${device.id}`)}
                 >
-                  <TableCell className="font-mono text-xs text-[#85AFDD]">
+                  <TableCell className="font-mono text-xs text-muted-foreground">
                     {device.id}
                   </TableCell>
-                  <TableCell className="font-medium text-[#E9F1FF]">
+                  <TableCell className="font-medium text-foreground">
                     {device.deviceName}
                   </TableCell>
-                  <TableCell className="text-[#85AFDD]">
+                  <TableCell className="text-muted-foreground">
                     {device.platform}
                   </TableCell>
                   <TableCell>
@@ -170,7 +170,7 @@ export default function DevicesPage() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-7 w-7 text-[#6B94C1] hover:bg-[#003257] hover:text-[#A1CAFA]"
+                      className="h-7 w-7 text-muted-foreground hover:bg-card hover:text-foreground"
                       onClick={(e) => {
                         e.stopPropagation();
                         router.push(`/devices/${device.id}`);
@@ -188,16 +188,16 @@ export default function DevicesPage() {
       </div>
 
       {/* Pagination */}
-      {!isLoading && data && data.total > PAGE_SIZE && (
-        <div className="flex items-center justify-between text-sm text-[#85AFDD]">
+      {!isLoading && data && data.totalCount > PAGE_SIZE && (
+        <div className="flex items-center justify-between text-sm text-muted-foreground">
           <span>
-            Page {page} of {totalPages} &mdash; {data.total} total
+            Page {page} of {totalPages} &mdash; {data.totalCount} total
           </span>
           <div className="flex items-center gap-2">
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 text-[#85AFDD] hover:bg-[#003257] hover:text-[#E9F1FF] disabled:opacity-40"
+              className="h-8 w-8 text-muted-foreground hover:bg-card hover:text-foreground disabled:opacity-40"
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page <= 1}
               aria-label="Previous page"
@@ -207,7 +207,7 @@ export default function DevicesPage() {
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 text-[#85AFDD] hover:bg-[#003257] hover:text-[#E9F1FF] disabled:opacity-40"
+              className="h-8 w-8 text-muted-foreground hover:bg-card hover:text-foreground disabled:opacity-40"
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page >= totalPages}
               aria-label="Next page"

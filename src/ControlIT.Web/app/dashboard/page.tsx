@@ -15,18 +15,18 @@ interface StatCardProps {
 
 function StatCard({ title, value, icon: Icon, loading }: StatCardProps) {
   return (
-    <Card className="border-[rgba(107,148,193,0.18)] bg-[#003257]">
+    <Card className="border-border bg-card">
       <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-sm font-medium text-[#85AFDD]">
+        <CardTitle className="text-sm font-medium text-muted-foreground">
           {title}
         </CardTitle>
-        <Icon className="h-4 w-4 text-[#6B94C1]" aria-hidden="true" />
+        <Icon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
       </CardHeader>
       <CardContent>
         {loading ? (
-          <Skeleton className="h-8 w-24 bg-[#1B4972]" />
+          <Skeleton className="h-8 w-24 bg-muted" />
         ) : (
-          <p className="text-3xl font-bold text-[#A1CAFA]">
+          <p className="text-3xl font-bold text-foreground">
             {value?.toLocaleString() ?? "—"}
           </p>
         )}

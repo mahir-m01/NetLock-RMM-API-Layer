@@ -66,10 +66,10 @@ export default function CommandsPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <Card className="border-[rgba(107,148,193,0.18)] bg-[#003257]">
+      <Card className="border-border bg-card">
         <CardHeader className="pb-4">
-          <CardTitle className="flex items-center gap-2 text-base text-[#E9F1FF]">
-            <Terminal className="h-4 w-4 text-[#A1CAFA]" />
+          <CardTitle className="flex items-center gap-2 text-base text-foreground">
+            <Terminal className="h-4 w-4 text-muted-foreground" />
             Command Dispatch
           </CardTitle>
         </CardHeader>
@@ -77,7 +77,7 @@ export default function CommandsPage() {
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
               <label
-                className="text-xs font-medium text-[#85AFDD]"
+                className="text-xs font-medium text-muted-foreground"
                 htmlFor="device-id-input"
               >
                 Device ID
@@ -86,15 +86,15 @@ export default function CommandsPage() {
                 id="device-id-input"
                 value={deviceId}
                 onChange={(e) => setDeviceId(e.target.value)}
-                placeholder="e.g. 3f1a2b4c-..."
-                className="border-[rgba(107,148,193,0.18)] bg-[#1B4972] text-[#E9F1FF] placeholder:text-[#85AFDD] font-mono"
+                placeholder="e.g. 27"
+                className="border-border bg-muted text-foreground placeholder:text-muted-foreground font-mono"
                 required
               />
             </div>
 
             <div className="space-y-2">
               <label
-                className="text-xs font-medium text-[#85AFDD]"
+                className="text-xs font-medium text-muted-foreground"
                 htmlFor="command-textarea"
               >
                 Command
@@ -105,34 +105,34 @@ export default function CommandsPage() {
                 onChange={(e) => setCommand(e.target.value)}
                 rows={5}
                 placeholder="e.g. ls -la /tmp"
-                className="w-full rounded-md border border-[rgba(107,148,193,0.18)] bg-[#1B4972] px-3 py-2 font-mono text-sm text-[#E9F1FF] placeholder:text-[#85AFDD] focus:outline-none focus:ring-2 focus:ring-[#A1CAFA] resize-y"
+                className="w-full rounded-md border border-border bg-muted px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-y"
                 required
               />
             </div>
 
             <div className="flex gap-4">
               <div className="flex-1 space-y-2">
-                <label className="text-xs font-medium text-[#85AFDD]">
+                <label className="text-xs font-medium text-muted-foreground">
                   Shell
                 </label>
                 <Select
                   value={shell}
                   onValueChange={(v) => setShell(v as Shell)}
                 >
-                  <SelectTrigger className="border-[rgba(107,148,193,0.18)] bg-[#1B4972] text-[#E9F1FF]">
+                  <SelectTrigger className="border-border bg-muted text-foreground">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="border-[rgba(107,148,193,0.18)] bg-[#003257] text-[#E9F1FF]">
-                    <SelectItem value="bash" className="focus:bg-[#1B4972]">
+                  <SelectContent className="border-border bg-card text-foreground">
+                    <SelectItem value="bash" className="focus:bg-muted">
                       bash
                     </SelectItem>
                     <SelectItem
                       value="powershell"
-                      className="focus:bg-[#1B4972]"
+                      className="focus:bg-muted"
                     >
                       powershell
                     </SelectItem>
-                    <SelectItem value="cmd" className="focus:bg-[#1B4972]">
+                    <SelectItem value="cmd" className="focus:bg-muted">
                       cmd
                     </SelectItem>
                   </SelectContent>
@@ -141,13 +141,13 @@ export default function CommandsPage() {
 
               <div className="flex-1 space-y-2">
                 <label
-                  className="text-xs font-medium text-[#85AFDD]"
+                  className="text-xs font-medium text-muted-foreground"
                   htmlFor="timeout-range"
                 >
                   Timeout: {timeout}s
                 </label>
                 <div className="flex items-center gap-2 h-9">
-                  <span className="text-xs text-[#85AFDD]">5s</span>
+                  <span className="text-xs text-muted-foreground">5s</span>
                   <input
                     id="timeout-range"
                     type="range"
@@ -155,9 +155,9 @@ export default function CommandsPage() {
                     max={120}
                     value={timeout}
                     onChange={(e) => setTimeout(Number(e.target.value))}
-                    className="flex-1 accent-[#A1CAFA]"
+                    className="flex-1"
                   />
-                  <span className="text-xs text-[#85AFDD]">120s</span>
+                  <span className="text-xs text-muted-foreground">120s</span>
                 </div>
               </div>
             </div>
@@ -169,11 +169,11 @@ export default function CommandsPage() {
                 !command.trim() ||
                 !deviceId.trim()
               }
-              className="w-full bg-[#A1CAFA] text-[#001D35] font-semibold hover:bg-[#D0E4FF] disabled:opacity-50"
+              className="w-full"
             >
               {mutation.isPending ? (
                 <span className="flex items-center gap-2">
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#001D35] border-t-transparent" />
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-background border-t-transparent" />
                   Executing... {elapsed}s
                 </span>
               ) : (
@@ -186,9 +186,9 @@ export default function CommandsPage() {
 
       {/* Result */}
       {(isSuccess || isError) && (
-        <Card className="border-[rgba(107,148,193,0.18)] bg-[#003257]">
+        <Card className="border-border bg-card">
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardTitle className="text-sm font-medium text-[#85AFDD]">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
               Output
             </CardTitle>
             {exitCode !== undefined && (

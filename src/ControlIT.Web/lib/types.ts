@@ -18,11 +18,11 @@ export interface DashboardStats {
 export type DeviceStatus = "online" | "offline" | string;
 
 export interface Device {
-  id: string;
+  id: number;
   deviceName: string;
   platform: string;
   status: DeviceStatus;
-  tenantId?: string;
+  tenantId?: number;
   ipAddress?: string;
   macAddress?: string;
   osVersion?: string;
@@ -33,8 +33,8 @@ export interface Device {
 }
 
 export interface DevicesResponse {
-  data: Device[];
-  total: number;
+  items: Device[];
+  totalCount: number;
   page: number;
   pageSize: number;
 }
@@ -42,18 +42,18 @@ export interface DevicesResponse {
 // ─── Events ──────────────────────────────────────────────────────────────────
 
 export interface DeviceEvent {
-  id: string;
+  id: number;
   timestamp: string;
   eventType: string;
-  deviceId?: string;
+  deviceId?: number;
   deviceName?: string;
   description?: string;
   [key: string]: unknown;
 }
 
 export interface EventsResponse {
-  data: DeviceEvent[];
-  total: number;
+  items: DeviceEvent[];
+  totalCount: number;
   page: number;
   pageSize: number;
 }
@@ -61,37 +61,25 @@ export interface EventsResponse {
 // ─── Tenants ─────────────────────────────────────────────────────────────────
 
 export interface Tenant {
-  id: string;
+  id: number;
   name: string;
   createdAt?: string;
   deviceCount?: number;
   [key: string]: unknown;
 }
 
-export interface TenantsResponse {
-  data: Tenant[];
-  total?: number;
-}
-
 // ─── Audit Logs ──────────────────────────────────────────────────────────────
 
 export interface AuditLog {
-  id: string;
+  id: number;
   timestamp: string;
   action: string;
-  deviceId?: string;
+  deviceId?: number;
   deviceName?: string;
-  tenantId?: string;
+  tenantId?: number;
   tenantName?: string;
   status?: string;
   [key: string]: unknown;
-}
-
-export interface AuditLogsResponse {
-  data: AuditLog[];
-  total: number;
-  limit: number;
-  offset: number;
 }
 
 // ─── Commands ────────────────────────────────────────────────────────────────

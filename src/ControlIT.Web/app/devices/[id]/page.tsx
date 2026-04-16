@@ -51,13 +51,13 @@ function DetailRow({
   value,
 }: {
   label: string;
-  value: string | undefined;
+  value: string | number | undefined;
 }) {
   return (
-    <div className="flex flex-col gap-0.5 py-3 border-b border-[rgba(107,148,193,0.18)] last:border-0">
-      <span className="text-xs text-[#85AFDD]">{label}</span>
-      <span className="text-sm text-[#E9F1FF] font-mono break-all">
-        {value ?? "—"}
+    <div className="flex flex-col gap-0.5 py-3 border-b border-border last:border-0">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="text-sm text-foreground font-mono break-all">
+        {value !== undefined && value !== null ? String(value) : "—"}
       </span>
     </div>
   );
@@ -104,21 +104,21 @@ function CommandSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="border-l border-[rgba(107,148,193,0.18)] bg-[#003257] text-[#E9F1FF] w-full sm:max-w-lg overflow-y-auto">
+      <SheetContent className="border-l border-border bg-card text-foreground w-full sm:max-w-lg overflow-y-auto">
         <SheetHeader className="mb-4">
-          <SheetTitle className="text-[#E9F1FF] flex items-center gap-2">
-            <Terminal className="h-4 w-4 text-[#A1CAFA]" />
+          <SheetTitle className="text-foreground flex items-center gap-2">
+            <Terminal className="h-4 w-4 text-muted-foreground" />
             Execute Command
           </SheetTitle>
-          <SheetDescription className="text-[#85AFDD]">
+          <SheetDescription className="text-muted-foreground">
             Run a command on device{" "}
-            <span className="font-mono text-[#A1CAFA]">{deviceId}</span>.
+            <span className="font-mono text-foreground">{deviceId}</span>.
           </SheetDescription>
         </SheetHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <label className="text-xs text-[#85AFDD]" htmlFor="cmd-input">
+            <label className="text-xs text-muted-foreground" htmlFor="cmd-input">
               Command
             </label>
             <textarea
@@ -127,31 +127,31 @@ function CommandSheet({
               onChange={(e) => setCommand(e.target.value)}
               rows={4}
               placeholder="e.g. ls -la / or Get-Process"
-              className="w-full rounded-md border border-[rgba(107,148,193,0.18)] bg-[#1B4972] px-3 py-2 font-mono text-sm text-[#E9F1FF] placeholder:text-[#85AFDD] focus:outline-none focus:ring-2 focus:ring-[#A1CAFA] resize-none"
+              className="w-full rounded-md border border-border bg-muted px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none"
               required
             />
           </div>
 
           <div className="flex gap-3">
             <div className="flex-1 space-y-2">
-              <label className="text-xs text-[#85AFDD]">Shell</label>
+              <label className="text-xs text-muted-foreground">Shell</label>
               <Select
                 value={shell}
                 onValueChange={(v) => setShell(v as Shell)}
               >
-                <SelectTrigger className="border-[rgba(107,148,193,0.18)] bg-[#1B4972] text-[#E9F1FF]">
+                <SelectTrigger className="border-border bg-muted text-foreground">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="border-[rgba(107,148,193,0.18)] bg-[#003257] text-[#E9F1FF]">
-                  <SelectItem value="bash" className="focus:bg-[#1B4972]">bash</SelectItem>
-                  <SelectItem value="powershell" className="focus:bg-[#1B4972]">powershell</SelectItem>
-                  <SelectItem value="cmd" className="focus:bg-[#1B4972]">cmd</SelectItem>
+                <SelectContent className="border-border bg-card text-foreground">
+                  <SelectItem value="bash" className="focus:bg-muted">bash</SelectItem>
+                  <SelectItem value="powershell" className="focus:bg-muted">powershell</SelectItem>
+                  <SelectItem value="cmd" className="focus:bg-muted">cmd</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="flex-1 space-y-2">
-              <label className="text-xs text-[#85AFDD]" htmlFor="timeout-input">
+              <label className="text-xs text-muted-foreground" htmlFor="timeout-input">
                 Timeout: {timeout}s
               </label>
               <Input
@@ -161,7 +161,7 @@ function CommandSheet({
                 max={120}
                 value={timeout}
                 onChange={(e) => setTimeout(Number(e.target.value))}
-                className="h-9 border-[rgba(107,148,193,0.18)] bg-[#1B4972] accent-[#A1CAFA]"
+                className="h-9 border-border bg-muted"
               />
             </div>
           </div>
@@ -169,11 +169,11 @@ function CommandSheet({
           <Button
             type="submit"
             disabled={mutation.isPending || !command.trim()}
-            className="w-full bg-[#A1CAFA] text-[#001D35] font-semibold hover:bg-[#D0E4FF] disabled:opacity-50"
+            className="w-full"
           >
             {mutation.isPending ? (
               <span className="flex items-center gap-2">
-                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#001D35] border-t-transparent" />
+                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-background border-t-transparent" />
                 Running... {elapsed}s
               </span>
             ) : (
@@ -185,7 +185,7 @@ function CommandSheet({
         {(isSuccess || isError) && (
           <div className="mt-6 space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-[#85AFDD]">Output</span>
+              <span className="text-xs text-muted-foreground">Output</span>
               {status !== undefined && (
                 <Badge
                   className={
@@ -233,7 +233,7 @@ export default function DeviceDetailPage({ params }: PageProps) {
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 text-[#85AFDD] hover:bg-[#003257] hover:text-[#E9F1FF]"
+          className="h-8 w-8 text-muted-foreground hover:bg-card hover:text-foreground"
           onClick={() => router.back()}
           aria-label="Go back"
         >
@@ -241,9 +241,9 @@ export default function DeviceDetailPage({ params }: PageProps) {
         </Button>
         <div>
           {isLoading ? (
-            <Skeleton className="h-5 w-40 bg-[#1B4972]" />
+            <Skeleton className="h-5 w-40 bg-muted" />
           ) : (
-            <h2 className="text-base font-semibold text-[#E9F1FF]">
+            <h2 className="text-base font-semibold text-foreground">
               {device?.deviceName ?? id}
             </h2>
           )}
@@ -253,7 +253,6 @@ export default function DeviceDetailPage({ params }: PageProps) {
             <StatusBadge status={device.status} />
             <Button
               onClick={() => setSheetOpen(true)}
-              className="bg-[#A1CAFA] text-[#001D35] font-semibold hover:bg-[#D0E4FF]"
               size="sm"
             >
               <Terminal className="mr-2 h-3.5 w-3.5" />
@@ -270,17 +269,17 @@ export default function DeviceDetailPage({ params }: PageProps) {
       )}
 
       {isLoading ? (
-        <Card className="border-[rgba(107,148,193,0.18)] bg-[#003257]">
+        <Card className="border-border bg-card">
           <CardContent className="space-y-3 pt-6">
             {Array.from({ length: 8 }).map((_, i) => (
-              <Skeleton key={i} className="h-10 w-full bg-[#1B4972]" />
+              <Skeleton key={i} className="h-10 w-full bg-muted" />
             ))}
           </CardContent>
         </Card>
       ) : device ? (
-        <Card className="border-[rgba(107,148,193,0.18)] bg-[#003257]">
+        <Card className="border-border bg-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-[#85AFDD]">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
               Device Information
             </CardTitle>
           </CardHeader>

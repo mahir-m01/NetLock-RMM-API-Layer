@@ -9,29 +9,29 @@ import { Building2 } from "lucide-react";
 
 function TenantCard({ tenant }: { tenant: Tenant }) {
   return (
-    <Card className="border-[rgba(107,148,193,0.18)] bg-[#003257]">
+    <Card className="border-border bg-card">
       <CardHeader className="pb-2 flex flex-row items-center gap-3">
-        <Building2 className="h-5 w-5 text-[#6B94C1] shrink-0" />
-        <CardTitle className="text-base font-semibold text-[#E9F1FF] leading-tight">
+        <Building2 className="h-5 w-5 text-muted-foreground shrink-0" />
+        <CardTitle className="text-base font-semibold text-foreground leading-tight">
           {tenant.name}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-1">
-        <p className="font-mono text-xs text-[#85AFDD]">
+        <p className="font-mono text-xs text-muted-foreground">
           ID: {tenant.id}
         </p>
         {tenant.deviceCount !== undefined && (
-          <p className="text-xs text-[#85AFDD]">
+          <p className="text-xs text-muted-foreground">
             Devices:{" "}
-            <span className="text-[#A1CAFA] font-medium">
+            <span className="text-foreground font-medium">
               {tenant.deviceCount}
             </span>
           </p>
         )}
         {tenant.createdAt && (
-          <p className="text-xs text-[#85AFDD]">
+          <p className="text-xs text-muted-foreground">
             Created:{" "}
-            <span className="text-[#D0E4FF]">
+            <span className="text-foreground">
               {new Date(tenant.createdAt).toLocaleDateString("en-GB", {
                 dateStyle: "medium",
               })}
@@ -47,13 +47,13 @@ function SkeletonCards({ count }: { count: number }) {
   return (
     <>
       {Array.from({ length: count }).map((_, i) => (
-        <Card key={i} className="border-[rgba(107,148,193,0.18)] bg-[#003257]">
+        <Card key={i} className="border-border bg-card">
           <CardHeader className="pb-2">
-            <Skeleton className="h-5 w-32 bg-[#1B4972]" />
+            <Skeleton className="h-5 w-32 bg-muted" />
           </CardHeader>
           <CardContent className="space-y-2">
-            <Skeleton className="h-3 w-48 bg-[#1B4972]" />
-            <Skeleton className="h-3 w-24 bg-[#1B4972]" />
+            <Skeleton className="h-3 w-48 bg-muted" />
+            <Skeleton className="h-3 w-24 bg-muted" />
           </CardContent>
         </Card>
       ))}
@@ -75,8 +75,8 @@ export default function TenantsPage() {
         </div>
       )}
 
-      {!isLoading && !isError && data?.data.length === 0 && (
-        <div className="rounded-lg border border-[rgba(107,148,193,0.18)] bg-[#003257] px-4 py-10 text-center text-sm text-[#85AFDD]">
+      {!isLoading && !isError && data?.length === 0 && (
+        <div className="rounded-lg border border-border bg-card px-4 py-10 text-center text-sm text-muted-foreground">
           No tenants found.
         </div>
       )}
@@ -85,7 +85,7 @@ export default function TenantsPage() {
         {isLoading ? (
           <SkeletonCards count={6} />
         ) : (
-          data?.data.map((tenant: Tenant) => (
+          data?.map((tenant: Tenant) => (
             <TenantCard key={tenant.id} tenant={tenant} />
           ))
         )}

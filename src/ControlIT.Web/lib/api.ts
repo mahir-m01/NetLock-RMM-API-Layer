@@ -4,8 +4,8 @@ import type {
   DevicesResponse,
   Device,
   EventsResponse,
-  TenantsResponse,
-  AuditLogsResponse,
+  Tenant,
+  AuditLog,
   ExecuteCommandRequest,
   ExecuteCommandResponse,
   DeviceFilters,
@@ -114,8 +114,8 @@ export async function getEvents(
   return request<EventsResponse>(`/events?${params.toString()}`);
 }
 
-export async function getTenants(): Promise<TenantsResponse> {
-  return request<TenantsResponse>("/tenants");
+export async function getTenants(): Promise<Tenant[]> {
+  return request<Tenant[]>("/tenants");
 }
 
 export async function getAuditLogs(
@@ -123,14 +123,14 @@ export async function getAuditLogs(
   offset: number,
   from?: string,
   to?: string
-): Promise<AuditLogsResponse> {
+): Promise<AuditLog[]> {
   const params = new URLSearchParams({
     limit: String(limit),
     offset: String(offset),
   });
   if (from) params.set("from", from);
   if (to) params.set("to", to);
-  return request<AuditLogsResponse>(`/audit/logs?${params.toString()}`);
+  return request<AuditLog[]>(`/audit/logs?${params.toString()}`);
 }
 
 export async function executeCommand(

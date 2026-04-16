@@ -32,7 +32,7 @@ function formatTimestamp(ts: string) {
 }
 
 function StatusBadge({ status }: { status: string | undefined }) {
-  if (!status) return <span className="text-[#85AFDD]">—</span>;
+  if (!status) return <span className="text-muted-foreground">—</span>;
   const isSuccess =
     status.toLowerCase() === "success" || status.toLowerCase() === "ok";
   return (
@@ -52,10 +52,10 @@ function SkeletonRows({ count }: { count: number }) {
   return (
     <>
       {Array.from({ length: count }).map((_, i) => (
-        <TableRow key={i} className="border-[rgba(107,148,193,0.18)]">
+        <TableRow key={i} className="border-border">
           {Array.from({ length: 5 }).map((_, j) => (
             <TableCell key={j}>
-              <Skeleton className="h-4 w-full bg-[#1B4972]" />
+              <Skeleton className="h-4 w-full bg-muted" />
             </TableCell>
           ))}
         </TableRow>
@@ -80,9 +80,10 @@ export default function AuditPage() {
       ),
   });
 
-  const total = data?.total ?? 0;
+  // data is AuditLog[] — length drives pagination UI
+  const itemCount = data?.length ?? 0;
   const page = Math.floor(offset / PAGE_LIMIT) + 1;
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_LIMIT));
+  const hasNextPage = itemCount === PAGE_LIMIT;
 
   function handleFromChange(e: React.ChangeEvent<HTMLInputElement>) {
     setFrom(e.target.value);
@@ -99,32 +100,32 @@ export default function AuditPage() {
       {/* Date range filters */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="flex items-center gap-2">
-          <label className="text-xs text-[#85AFDD] whitespace-nowrap">
+          <label className="text-xs text-muted-foreground whitespace-nowrap">
             From
           </label>
           <Input
             type="datetime-local"
             value={from}
             onChange={handleFromChange}
-            className="border-[rgba(107,148,193,0.18)] bg-[#1B4972] text-[#E9F1FF] [color-scheme:dark]"
+            className="border-border bg-muted text-foreground [color-scheme:dark]"
           />
         </div>
         <div className="flex items-center gap-2">
-          <label className="text-xs text-[#85AFDD] whitespace-nowrap">
+          <label className="text-xs text-muted-foreground whitespace-nowrap">
             To
           </label>
           <Input
             type="datetime-local"
             value={to}
             onChange={handleToChange}
-            className="border-[rgba(107,148,193,0.18)] bg-[#1B4972] text-[#E9F1FF] [color-scheme:dark]"
+            className="border-border bg-muted text-foreground [color-scheme:dark]"
           />
         </div>
         {(from || to) && (
           <Button
             variant="ghost"
             size="sm"
-            className="text-[#85AFDD] hover:text-[#E9F1FF] hover:bg-[#003257]"
+            className="text-muted-foreground hover:text-foreground hover:bg-card"
             onClick={() => {
               setFrom("");
               setTo("");
@@ -142,45 +143,45 @@ export default function AuditPage() {
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-lg border border-[rgba(107,148,193,0.18)] bg-[#003257]">
+      <div className="overflow-x-auto rounded-lg border border-border bg-card">
         <Table>
           <TableHeader>
-            <TableRow className="border-[rgba(107,148,193,0.18)] hover:bg-transparent">
-              <TableHead className="text-[#85AFDD]">Timestamp</TableHead>
-              <TableHead className="text-[#85AFDD]">Action</TableHead>
-              <TableHead className="text-[#85AFDD]">Device</TableHead>
-              <TableHead className="text-[#85AFDD]">Tenant</TableHead>
-              <TableHead className="text-[#85AFDD]">Status</TableHead>
+            <TableRow className="border-border hover:bg-transparent">
+              <TableHead className="text-muted-foreground">Timestamp</TableHead>
+              <TableHead className="text-muted-foreground">Action</TableHead>
+              <TableHead className="text-muted-foreground">Device</TableHead>
+              <TableHead className="text-muted-foreground">Tenant</TableHead>
+              <TableHead className="text-muted-foreground">Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               <SkeletonRows count={10} />
-            ) : data?.data.length === 0 ? (
-              <TableRow className="border-[rgba(107,148,193,0.18)]">
+            ) : data?.length === 0 ? (
+              <TableRow className="border-border">
                 <TableCell
                   colSpan={5}
-                  className="py-10 text-center text-[#85AFDD]"
+                  className="py-10 text-center text-muted-foreground"
                 >
                   No audit logs found.
                 </TableCell>
               </TableRow>
             ) : (
-              data?.data.map((log: AuditLog) => (
+              data?.map((log: AuditLog) => (
                 <TableRow
                   key={log.id}
-                  className="border-[rgba(107,148,193,0.18)] hover:bg-[#1B4972]"
+                  className="border-border hover:bg-muted"
                 >
-                  <TableCell className="font-mono text-xs text-[#85AFDD] whitespace-nowrap">
+                  <TableCell className="font-mono text-xs text-muted-foreground whitespace-nowrap">
                     {formatTimestamp(log.timestamp)}
                   </TableCell>
-                  <TableCell className="text-[#A1CAFA] font-medium">
+                  <TableCell className="text-foreground font-medium">
                     {log.action}
                   </TableCell>
-                  <TableCell className="text-[#E9F1FF]">
+                  <TableCell className="text-foreground">
                     {log.deviceName ?? log.deviceId ?? "—"}
                   </TableCell>
-                  <TableCell className="text-[#E9F1FF]">
+                  <TableCell className="text-foreground">
                     {log.tenantName ?? log.tenantId ?? "—"}
                   </TableCell>
                   <TableCell>
@@ -193,16 +194,14 @@ export default function AuditPage() {
         </Table>
       </div>
 
-      {!isLoading && total > PAGE_LIMIT && (
-        <div className="flex items-center justify-between text-sm text-[#85AFDD]">
-          <span>
-            Page {page} of {totalPages} &mdash; {total} total
-          </span>
+      {!isLoading && (offset > 0 || hasNextPage) && (
+        <div className="flex items-center justify-between text-sm text-muted-foreground">
+          <span>Page {page}</span>
           <div className="flex items-center gap-2">
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 text-[#85AFDD] hover:bg-[#003257] hover:text-[#E9F1FF] disabled:opacity-40"
+              className="h-8 w-8 text-muted-foreground hover:bg-card hover:text-foreground disabled:opacity-40"
               onClick={() => setOffset((o) => Math.max(0, o - PAGE_LIMIT))}
               disabled={offset === 0}
               aria-label="Previous page"
@@ -212,9 +211,9 @@ export default function AuditPage() {
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 text-[#85AFDD] hover:bg-[#003257] hover:text-[#E9F1FF] disabled:opacity-40"
+              className="h-8 w-8 text-muted-foreground hover:bg-card hover:text-foreground disabled:opacity-40"
               onClick={() => setOffset((o) => o + PAGE_LIMIT)}
-              disabled={offset + PAGE_LIMIT >= total}
+              disabled={!hasNextPage}
               aria-label="Next page"
             >
               <ChevronRight className="h-4 w-4" />
