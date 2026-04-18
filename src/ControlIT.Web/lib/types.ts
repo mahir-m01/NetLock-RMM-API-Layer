@@ -110,6 +110,7 @@ export interface EventsResponse {
   totalCount: number;
   page: number;
   pageSize: number;
+  totalPages: number;
 }
 
 // ─── Tenants ─────────────────────────────────────────────────────────────────

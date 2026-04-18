@@ -53,7 +53,7 @@ export default function EventsPage() {
     queryFn: () => getEvents(page, PAGE_SIZE),
   });
 
-  const totalPages = data ? Math.ceil(data.totalCount / PAGE_SIZE) : 1;
+  const totalPages = data?.totalPages ?? 1;
 
   return (
     <div className="space-y-4">
