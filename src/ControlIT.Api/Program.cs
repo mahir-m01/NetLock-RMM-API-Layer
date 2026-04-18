@@ -10,6 +10,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 using System.Text;
+using System.Text.Json.Serialization;
 using Dapper;
 using ControlIT.Api.Application;
 using ControlIT.Api.Domain.Models;
@@ -80,7 +81,8 @@ builder.Services.AddCors(options =>
                 builder.Configuration["Cors:AllowedOrigins"]?.Split(',')
                 ?? ["http://localhost:3000"])
               .AllowAnyHeader()
-              .AllowAnyMethod();
+              .AllowAnyMethod()
+              .AllowCredentials();
     });
 });
 
@@ -207,6 +209,10 @@ if (Encoding.UTF8.GetByteCount(jwtKey) < 32)
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
+        // Prevents JwtSecurityTokenHandler from remapping claim names via InboundClaimTypeMap.
+        // Without this, the "role" JWT claim becomes ClaimTypes.Role (long URI) in the principal,
+        // making FindFirst("role") return null in HttpActorContext and policy assertions.
+        options.MapInboundClaims = false;
         options.TokenValidationParameters = JwtService.BuildValidationParameters(jwtKey);
         // Let the pipeline return 401 — endpoints call RequireAuthorization().
         options.Events = new JwtBearerEvents
@@ -257,6 +263,12 @@ builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
 builder.Services.AddScoped<IPasswordResetTokenRepository, PasswordResetTokenRepository>();
 builder.Services.AddHostedService<BootstrapUserSeeder>();
 
+// ── JSON — serialize enums as strings globally ────────────────────────────
+// Without this, Role enum serializes as 0/1/2/3 in JSON responses.
+// The frontend expects "SuperAdmin", "CpAdmin", etc. from /auth/login.
+builder.Services.ConfigureHttpJsonOptions(o =>
+    o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+
 // ── Health checks ─────────────────────────────────────────────────────────
 builder.Services.AddHealthChecks();
 
@@ -289,6 +301,17 @@ app.UseAuthorization();                          // 4. Policy enforcement
 
 app.UseRateLimiter();                            // 5. Rate limiting after auth
 // WHY after auth: limits are applied per authenticated identity, not per IP.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Auto-apply EF migrations at startup (idempotent) ─────────────────────────
+// MigrateAsync() applies any pending EF migrations. Already-applied migrations
+// are skipped, so this is safe to run on every startup.
+// Must run BEFORE schema validation so EF creates controlit_* tables first.
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<ControlItDbContext>();
+    await db.Database.MigrateAsync();
+}
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── Schema validation at startup ─────────────────────────────────────────────

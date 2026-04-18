@@ -10,7 +10,9 @@ import {
   Building2,
   ClipboardList,
   Terminal,
-  Settings,
+  Users,
+  LogOut,
+  KeyRound,
 } from "lucide-react"
 import {
   Sidebar,
@@ -23,8 +25,10 @@ import {
   SidebarGroup,
   SidebarGroupContent,
 } from "@/components/ui/sidebar"
+import { Button } from "@/components/ui/button"
+import { useAuth } from "@/components/providers/auth-provider"
 
-const NAV_ITEMS = [
+const BASE_NAV_ITEMS = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Devices", url: "/devices", icon: Monitor },
   { title: "Events", url: "/events", icon: Activity },
@@ -33,15 +37,51 @@ const NAV_ITEMS = [
   { title: "Commands", url: "/commands", icon: Terminal },
 ]
 
-interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
-  onSettingsClick?: () => void
-}
+const ADMIN_NAV_ITEM = { title: "Users", url: "/admin/users", icon: Users }
 
-export function AppSidebar({ onSettingsClick, ...props }: AppSidebarProps) {
-  const pathname = usePathname()
+function ResizeHandle() {
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = parseInt(
+      getComputedStyle(document.documentElement)
+        .getPropertyValue("--sidebar-width") || "288"
+    );
+
+    const onMouseMove = (e: MouseEvent) => {
+      const newWidth = Math.min(400, Math.max(180, startWidth + e.clientX - startX));
+      document.documentElement.style.setProperty(
+        "--sidebar-width", `${newWidth}px`
+      );
+    };
+
+    const onMouseUp = () => {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+    };
+
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+  };
 
   return (
-    <Sidebar collapsible="offcanvas" {...props}>
+    <div
+      onMouseDown={handleMouseDown}
+      className="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-sidebar-primary/50 transition-colors"
+      aria-hidden="true"
+    />
+  );
+}
+
+export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
+  const pathname = usePathname()
+  const { user, logout } = useAuth()
+
+  const isAdminRole = user?.role === "SuperAdmin" || user?.role === "CpAdmin"
+  const navItems = isAdminRole ? [...BASE_NAV_ITEMS, ADMIN_NAV_ITEM] : BASE_NAV_ITEMS
+
+  return (
+    <Sidebar collapsible="offcanvas" {...props} style={{ position: "relative" }}>
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
@@ -61,7 +101,7 @@ export function AppSidebar({ onSettingsClick, ...props }: AppSidebarProps) {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {NAV_ITEMS.map((item) => {
+              {navItems.map((item) => {
                 const isActive =
                   pathname === item.url || pathname.startsWith(item.url + "/")
                 return (
@@ -81,15 +121,34 @@ export function AppSidebar({ onSettingsClick, ...props }: AppSidebarProps) {
       </SidebarContent>
 
       <SidebarFooter>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton onClick={onSettingsClick}>
-              <Settings />
-              <span>API Settings</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <div className="px-2 py-2 space-y-1">
+          {user && (
+            <p className="truncate text-xs text-muted-foreground px-2 pb-1" title={user.email}>
+              {user.email}
+            </p>
+          )}
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild>
+                <Link href="/account/change-password">
+                  <KeyRound />
+                  <span>Change Password</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                onClick={() => void logout()}
+                className="text-destructive hover:text-destructive"
+              >
+                <LogOut />
+                <span>Log out</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </div>
       </SidebarFooter>
+      <ResizeHandle />
     </Sidebar>
   )
 }

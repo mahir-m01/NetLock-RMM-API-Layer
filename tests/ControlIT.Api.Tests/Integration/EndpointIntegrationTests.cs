@@ -7,22 +7,24 @@
 // spin up the full API in-memory against the real local dev stack:
 //   MySQL:   localhost:3306, database iphbmh
 //   NetLock: localhost:7080/commandHub
-//   API key: controlit-test-2026 (tenant_id = 3)
+//   Auth:    JWT Bearer token issued via ControlItWebApplicationFactory.IssueToken()
 //
 // Run with: dotnet test --filter "Category=Integration"
 // ─────────────────────────────────────────────────────────────────────────────
 namespace ControlIT.Api.Tests.Integration;
 
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using ControlIT.Api.Domain.Models;
 using Xunit;
 
 /// <summary>
 /// Integration tests for all business endpoints. One [Fact] per behaviour.
-/// All tests share a single HttpClient with the API key pre-set via IClassFixture.
+/// All tests share a single HttpClient with a SuperAdmin JWT pre-set via IClassFixture.
 /// </summary>
 public class EndpointIntegrationTests : IClassFixture<ControlItWebApplicationFactory>
 {
@@ -56,7 +58,9 @@ public class EndpointIntegrationTests : IClassFixture<ControlItWebApplicationFac
     {
         _factory = factory;
         _client = factory.CreateClient();
-        _client.DefaultRequestHeaders.Add("x-api-key", "controlit-test-2026");
+        var token = factory.IssueToken(Role.SuperAdmin);
+        _client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", token);
     }
 
     // ── GET /devices ──────────────────────────────────────────────────────────
@@ -196,7 +200,6 @@ public class EndpointIntegrationTests : IClassFixture<ControlItWebApplicationFac
         var response = await _client.GetAsync("/events?page=1&pageSize=10");
         response.EnsureSuccessStatusCode();
 
-        // Deserialise using a DeviceDto placeholder — we only care about totalCount here.
         var body = await response.Content.ReadFromJsonAsync<PagedResponse<JsonElement>>();
 
         Assert.NotNull(body);
@@ -264,7 +267,7 @@ public class EndpointIntegrationTests : IClassFixture<ControlItWebApplicationFac
 
         // 200 = command executed, 503 = device/hub offline, 504 = command timed out.
         // All three are valid live-stack outcomes. The unacceptable codes are:
-        // 400 (bad request — body is valid), 401 (auth failure — key is set),
+        // 400 (bad request — body is valid), 401 (auth failure — token is set),
         // 404 (device not found — 27 exists), 500 (unhandled exception).
         var acceptableStatuses = new[]
         {
@@ -276,21 +279,69 @@ public class EndpointIntegrationTests : IClassFixture<ControlItWebApplicationFac
         Assert.Contains(response.StatusCode, acceptableStatuses);
     }
 
-    // ── Auth guard spot-check ─────────────────────────────────────────────────
+    // ── Auth guard spot-checks ────────────────────────────────────────────────
 
     /// <summary>
-    /// GET /dashboard without the x-api-key header must return 401 Unauthorized.
+    /// GET /dashboard without a Bearer token must return 401 Unauthorized.
     /// </summary>
     [Fact]
     [Trait("Category", "Integration")]
-    public async Task GetDashboard_WithoutApiKey_Returns401()
+    public async Task GetDashboard_WithoutToken_Returns401()
     {
-        // CreateClient() from the factory returns a fresh client with no default headers.
-        // We deliberately do NOT add the x-api-key header so the middleware rejects it.
         var unauthClient = _factory.CreateClient();
 
         var response = await unauthClient.GetAsync("/dashboard");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    /// <summary>
+    /// GET /devices without a Bearer token must return 401 Unauthorized.
+    /// </summary>
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task GetDevices_WithoutToken_Returns401()
+    {
+        var unauthClient = _factory.CreateClient();
+
+        var response = await unauthClient.GetAsync("/devices?page=1&pageSize=5");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    /// <summary>
+    /// GET /tenants with a TenantMember (ClientAdmin) JWT should return 200.
+    /// ClientAdmin is a valid TenantMember when a tenant_id claim is present.
+    /// </summary>
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task GetTenants_WithClientAdminToken_ReturnsOk()
+    {
+        var client = _factory.CreateClient();
+        var token = _factory.IssueToken(Role.ClientAdmin, tenantId: 1);
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await client.GetAsync("/tenants");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    /// <summary>
+    /// GET /audit/logs with a Technician JWT should return 200.
+    /// Technician is allowed by the TenantMember policy when tenant_id is present.
+    /// </summary>
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task GetAuditLogs_WithTechnicianToken_ReturnsOk()
+    {
+        var client = _factory.CreateClient();
+        var token = _factory.IssueToken(Role.Technician, tenantId: 1);
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await client.GetAsync("/audit/logs?limit=5&offset=0");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 }

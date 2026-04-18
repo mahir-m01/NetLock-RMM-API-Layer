@@ -1,0 +1,138 @@
+@startuml seq-04-login
+' ============================================================
+' SEQ-04: POST /auth/login — issue JWT access + refresh (httpOnly)
+' Scope : Contract 05B §5B.3 auth flow.
+' Guards: bcrypt verify (constant-time), lockout after 5 failures,
+'         refresh token stored as SHA-256 hash only, httpOnly cookie.
+' ============================================================
+
+title SEQ-04: POST /auth/login — issue JWT + refresh (Contract 05B)
+
+autonumber
+
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 11
+
+skinparam sequence {
+  ArrowColor #2E7D32
+  LifeLineBorderColor #1B5E20
+  ParticipantBackgroundColor #E8F5E9
+  ParticipantBorderColor #1B5E20
+  ActorBackgroundColor #FFEFCD
+  ActorBorderColor #AA6622
+  NoteBackgroundColor #FFFDE7
+  NoteBorderColor #AA8800
+}
+
+actor "Dashboard\n(Next.js)" as Dashboard
+participant "AuthEndpoints\n.MapPost(/auth/login)" as AE
+participant "AuthService" as Auth
+participant "IUserRepository" as Users
+participant "IPasswordHasher\n(BCrypt, wf=12)" as Hasher
+participant "IJwtService" as JWT
+participant "IRefreshTokenRepository" as RT
+participant "IClock" as Clock
+participant "AuditService" as Audit
+database  "controlit_users" as UDB
+database  "controlit_refresh_tokens" as RTDB
+database  "controlit_audit_log" as ADB
+
+Dashboard -> AE: POST /auth/login\n{ email, password }
+activate AE
+
+AE -> Auth: LoginAsync(req, HttpContext)
+activate Auth
+
+== 1. Lookup user (case-insensitive email) ==
+
+Auth -> Users: GetByEmailAsync(email.ToLowerInvariant())
+Users -> UDB: SELECT * FROM controlit_users\nWHERE LOWER(email)=@email
+UDB --> Users: row | null
+Users --> Auth
+
+alt user not found OR is_active = false OR locked_until > now
+  Auth -> Audit: Record(AUTH_LOGIN_FAILURE, email, ip, ua)
+  Audit -> ADB: INSERT (no password fields)
+  ADB --> Audit
+  Auth --> AE: throw UnauthorizedException("Invalid credentials")
+  AE --> Dashboard: 401 Unauthorized\n{ error: "Invalid credentials" }
+  note right of Auth
+    Single generic error message.
+    Never leak "user not found" vs "wrong password"
+    vs "account disabled" vs "locked" to an unauthenticated
+    caller. See test Login_WhenAccountInactive_Returns401_WithoutLeakingReason.
+  end note
+end
+
+== 2. Constant-time password verify ==
+
+Auth -> Hasher: Verify(plaintext, user.PasswordHash)
+Hasher --> Auth: bool ok
+
+alt password invalid
+  Auth -> Users: increment FailedLoginCount
+  Users -> UDB: UPDATE failed_login_count = failed_login_count + 1
+  alt failed_login_count >= 5
+    Auth -> Clock: UtcNow
+    Auth -> Users: set locked_until = now + 30min,\nreset failed_login_count = 0
+    Users -> UDB: UPDATE locked_until, failed_login_count
+  end
+  Auth -> Audit: Record(AUTH_LOGIN_FAILURE, email, ip, ua, reason="bad password")
+  Audit -> ADB: INSERT
+  Auth --> AE: UnauthorizedException
+  AE --> Dashboard: 401 Unauthorized
+end
+
+== 3. Success path — issue access + refresh ==
+
+Auth -> Clock: UtcNow
+Auth -> JWT: IssueAccessToken(user)
+JWT -> JWT: HS256 sign claims\n(sub, email, role, tenant_id,\n assigned_clients, iat, exp=now+15m, iss, aud, jti)
+JWT --> Auth: access_token (string)
+
+Auth -> Auth: rawRefresh = RandomNumberGenerator\n  .GetBytes(32).ToBase64Url()
+Auth -> Auth: refreshHash = SHA256(rawRefresh)
+Auth -> RT: InsertAsync(RefreshToken{\n  user_id, token_hash=refreshHash,\n  expires_at=now+7d, user_agent, ip })
+RT -> RTDB: INSERT
+RTDB --> RT: id
+RT --> Auth
+
+Auth -> Users: UPDATE last_login_at = now,\n               failed_login_count = 0
+Users -> UDB: UPDATE
+UDB --> Users
+
+Auth -> Audit: Record(AUTH_LOGIN_SUCCESS, user_id, ip, ua)
+Audit -> ADB: INSERT
+ADB --> Audit
+
+Auth --> AE: LoginResponse{\n  access_token,\n  expires_in=900,\n  user={id, email, role, tenant_id,\n        must_change_password, assigned_clients} }
+deactivate Auth
+
+== 4. Set httpOnly refresh cookie ==
+
+AE -> AE: Set-Cookie: refresh_token=<rawRefresh>\n  HttpOnly; Secure; SameSite=Strict;\n  Path=/auth; Max-Age=604800
+AE --> Dashboard: 200 OK\n(body = LoginResponse, cookie = refresh_token)
+deactivate AE
+
+note right of AE
+  - Access token returned in body — Dashboard stores
+    it in memory (React context), NEVER localStorage.
+  - Refresh token raw value is visible to the server
+    for exactly this one response, then dropped.
+  - Only the SHA-256 hash is persisted.
+  - Cookie scoped to Path=/auth so it is sent only
+    to /auth/refresh and /auth/logout.
+end note
+
+== 5. Forced password change ==
+
+alt user.MustChangePassword == true
+  note right of Dashboard
+    Client inspects LoginResponse.user.must_change_password.
+    Redirects to /account/change-password before allowing
+    any other navigation. See seq-06-password-change.
+  end note
+end
+
+@enduml

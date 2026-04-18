@@ -1,0 +1,127 @@
+@startuml seq-05-refresh-rotation
+' ============================================================
+' SEQ-05: POST /auth/refresh — rotation + replay-chain revocation
+' Scope : Contract 05B §5B.3 refresh flow.
+' Key  : On success, issue NEW refresh, mark OLD.replaced_by = NEW.
+'        On replay (old presented after rotation), revoke the
+'        whole chain for that user as a precaution.
+' ============================================================
+
+title SEQ-05: POST /auth/refresh — token rotation + replay detection
+
+autonumber
+
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 11
+
+skinparam sequence {
+  ArrowColor #2E7D32
+  LifeLineBorderColor #1B5E20
+  ParticipantBackgroundColor #E8F5E9
+  ParticipantBorderColor #1B5E20
+  ActorBackgroundColor #FFEFCD
+  ActorBorderColor #AA6622
+  NoteBackgroundColor #FFFDE7
+  NoteBorderColor #AA8800
+}
+
+actor "Dashboard" as Dashboard
+participant "AuthEndpoints\n.MapPost(/auth/refresh)\n[AllowAnonymous]" as AE
+participant "AuthService" as Auth
+participant "IRefreshTokenRepository" as RT
+participant "IJwtService" as JWT
+participant "IClock" as Clock
+participant "AuditService" as Audit
+database  "controlit_refresh_tokens" as RTDB
+database  "controlit_audit_log" as ADB
+
+== 1. Request — refresh cookie is sent automatically ==
+
+Dashboard -> AE: POST /auth/refresh\nCookie: refresh_token=<raw>
+activate AE
+
+AE -> AE: read raw from cookie\n(no body, httpOnly is source of truth)
+AE -> Auth: RefreshAsync(raw, HttpContext)
+activate Auth
+
+Auth -> Auth: hash = SHA256(raw)
+Auth -> RT: GetByHashAsync(hash)
+RT -> RTDB: SELECT * WHERE token_hash=@h
+RTDB --> RT: row | null
+RT --> Auth
+
+== 2. Reject: unknown / expired / already revoked ==
+
+alt row is null
+  Auth -> Audit: Record(AUTH_REFRESH_FAILURE, ip, ua, reason="unknown")
+  Audit -> ADB: INSERT
+  Auth --> AE: UnauthorizedException
+  AE --> Dashboard: 401 Unauthorized\nSet-Cookie: refresh_token=; Max-Age=0
+end
+
+alt row.ExpiresAt < now
+  Auth -> Audit: Record(AUTH_REFRESH_FAILURE, reason="expired")
+  Auth --> AE: UnauthorizedException
+  AE --> Dashboard: 401
+end
+
+alt row.RevokedAt != null
+  note right of Auth
+    REPLAY DETECTED.
+    The presented token was already used and rotated.
+    Either the caller replayed an old token (attacker
+    with a leaked cookie), or the real user's cookie
+    was stolen and used. In both cases we cannot tell
+    the two apart — revoke the entire chain for this user.
+  end note
+  Auth -> RT: RevokeAllForUserAsync(row.UserId)
+  RT -> RTDB: UPDATE controlit_refresh_tokens\n  SET revoked_at = now\n  WHERE user_id = @uid AND revoked_at IS NULL
+  Auth -> Audit: Record(AUTH_REFRESH_REPLAY, user_id, ip, ua)
+  Audit -> ADB: INSERT
+  Auth --> AE: UnauthorizedException("Session invalidated — please re-login")
+  AE --> Dashboard: 401 + clear cookie
+end
+
+== 3. Happy path — rotate ==
+
+Auth -> Clock: UtcNow
+Auth -> Auth: newRaw = RNG(32).ToBase64Url()
+Auth -> Auth: newHash = SHA256(newRaw)
+Auth -> RT: InsertAsync(RefreshToken{\n  user_id=row.UserId,\n  token_hash=newHash,\n  expires_at=now+7d,\n  user_agent, ip })
+RT -> RTDB: INSERT
+RTDB --> RT: new_id
+RT --> Auth
+
+Auth -> RT: RevokeAsync(id=row.Id,\n  replaced_by=new_id)
+RT -> RTDB: UPDATE SET revoked_at=now,\n               replaced_by=@new_id\n               WHERE id=@old_id
+RTDB --> RT
+RT --> Auth
+
+note right of Auth
+  Chain pointer lets us walk a rotation history
+  backwards for forensics without relying on timestamps.
+end note
+
+Auth -> JWT: IssueAccessToken(user)
+JWT --> Auth: new_access_token
+
+Auth -> Audit: Record(AUTH_REFRESH, user_id, ip, ua)
+Audit -> ADB: INSERT
+
+Auth --> AE: LoginResponse{ access_token=new_access_token,\n                expires_in=900,\n                user=... }
+deactivate Auth
+
+AE -> AE: Set-Cookie: refresh_token=<newRaw>\n  HttpOnly; Secure; SameSite=Strict;\n  Path=/auth; Max-Age=604800
+AE --> Dashboard: 200 OK\n(new access token in body, new refresh cookie)
+deactivate AE
+
+note right of AE
+  The new refresh cookie REPLACES the old one client-side
+  because the cookie name is the same and httpOnly means
+  only the server can rewrite it. The client sees only
+  "my session is still alive"; it never knows the rotation
+  happened.
+end note
+
+@enduml

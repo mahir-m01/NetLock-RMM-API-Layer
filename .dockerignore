@@ -1,0 +1,25 @@
+# Node
+src/ControlIT.Web/node_modules
+src/ControlIT.Web/.next
+
+# .NET build output
+src/ControlIT.Api/bin
+src/ControlIT.Api/obj
+tests/*/bin
+tests/*/obj
+
+# Docker
+Dockerfile*
+docker-compose.yml
+
+# Secrets and local config
+.env
+.env.*
+src/ControlIT.Api/Properties/launchSettings.json
+
+# Git
+.git
+.gitignore
+
+# macOS
+.DS_Store

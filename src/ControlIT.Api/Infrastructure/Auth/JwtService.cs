@@ -70,12 +70,16 @@ public sealed class JwtService : IJwtService
             IssuerSigningKey = _signingKey,
             ValidateIssuerSigningKey = true,
             ValidateLifetime = true,
-            ClockSkew = TimeSpan.FromSeconds(30)
+            ClockSkew = TimeSpan.FromSeconds(30),
+            NameClaimType = JwtRegisteredClaimNames.Sub,
+            RoleClaimType = "role"
         };
 
         try
         {
-            return new JwtSecurityTokenHandler().ValidateToken(token, parameters, out _);
+            var handler = new JwtSecurityTokenHandler();
+            handler.InboundClaimTypeMap.Clear();
+            return handler.ValidateToken(token, parameters, out _);
         }
         catch
         {
@@ -92,6 +96,11 @@ public sealed class JwtService : IJwtService
             ValidateIssuerSigningKey = true,
             ValidateLifetime = true,
             ClockSkew = TimeSpan.FromSeconds(30),
-            NameClaimType = JwtRegisteredClaimNames.Sub
+            // Without these, JwtSecurityTokenHandler remaps "role" and "sub" to long
+            // ClaimTypes URI forms (http://schemas.microsoft.com/.../claims/role).
+            // Explicitly setting the short-form names keeps FindFirst("role") and
+            // FindFirst("sub") working in HttpActorContext and policy assertions.
+            NameClaimType = JwtRegisteredClaimNames.Sub,
+            RoleClaimType = "role"
         };
 }

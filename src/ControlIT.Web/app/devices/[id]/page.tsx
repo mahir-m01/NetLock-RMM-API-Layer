@@ -250,7 +250,7 @@ export default function DeviceDetailPage({ params }: PageProps) {
         </div>
         {device && (
           <div className="ml-auto flex items-center gap-2">
-            <StatusBadge status={device.status} />
+            <StatusBadge status={device.status as string} />
             <Button
               onClick={() => setSheetOpen(true)}
               size="sm"

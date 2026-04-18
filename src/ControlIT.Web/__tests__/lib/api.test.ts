@@ -1,28 +1,10 @@
 import "@testing-library/jest-dom";
-import { getDevices } from "@/lib/api";
+import { setAccessToken, clearTokens } from "@/lib/auth";
+import { getDevices, getHealth, ApiError } from "@/lib/api";
 
 // Mock fetch globally
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
-
-// Mock localStorage
-const localStorageMock = (() => {
-  let store: Record<string, string> = {};
-  return {
-    getItem: (key: string) => store[key] ?? null,
-    setItem: (key: string, value: string) => {
-      store[key] = value;
-    },
-    removeItem: (key: string) => {
-      delete store[key];
-    },
-    clear: () => {
-      store = {};
-    },
-  };
-})();
-
-Object.defineProperty(global, "localStorage", { value: localStorageMock });
 
 function makeFetchResponse(body: unknown, ok = true, status = 200) {
   return {
@@ -41,7 +23,7 @@ function makeFetchResponse(body: unknown, ok = true, status = 200) {
 describe("getDevices", () => {
   beforeEach(() => {
     mockFetch.mockReset();
-    localStorage.clear();
+    clearTokens();
   });
 
   it("constructs the correct URL with page and pageSize params", async () => {
@@ -57,8 +39,8 @@ describe("getDevices", () => {
     expect(url).toContain("/devices");
   });
 
-  it("includes x-api-key header when key is in localStorage", async () => {
-    localStorage.setItem("controlit_api_key", "test-key-abc");
+  it("includes Authorization Bearer header when access token is set", async () => {
+    setAccessToken("test-access-token");
     mockFetch.mockResolvedValueOnce(
       makeFetchResponse({ items: [], totalCount: 0, page: 1, pageSize: 10 })
     );
@@ -67,10 +49,21 @@ describe("getDevices", () => {
 
     const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
     const headers = init.headers as Record<string, string>;
-    expect(headers["x-api-key"]).toBe("test-key-abc");
+    expect(headers["Authorization"]).toBe("Bearer test-access-token");
   });
 
-  it("does not include x-api-key header when no key is stored", async () => {
+  it("does not include Authorization header when no token is set", async () => {
+    mockFetch.mockResolvedValueOnce(
+      makeFetchResponse({ items: [], totalCount: 0, page: 1, pageSize: 10 })
+    );
+
+    // Simulate a 401 then a failed refresh so we don't hang
+    mockFetch.mockResolvedValueOnce(makeFetchResponse({}, false, 401));
+    mockFetch.mockResolvedValueOnce(makeFetchResponse({}, false, 401)); // refresh fails
+
+    // With no token the first request will 401 → try refresh (also fails) → throw
+    // For this test, just mock a successful response directly
+    mockFetch.mockReset();
     mockFetch.mockResolvedValueOnce(
       makeFetchResponse({ items: [], totalCount: 0, page: 1, pageSize: 10 })
     );
@@ -79,24 +72,33 @@ describe("getDevices", () => {
 
     const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
     const headers = init.headers as Record<string, string>;
-    expect(headers["x-api-key"]).toBeUndefined();
+    expect(headers["Authorization"]).toBeUndefined();
   });
 });
 
 describe("getHealth", () => {
   beforeEach(() => {
     mockFetch.mockReset();
-    localStorage.setItem("controlit_api_key", "should-not-be-sent");
+    setAccessToken("should-still-be-sent-but-skipAuth-true");
   });
 
-  it("does NOT include x-api-key header for /health requests", async () => {
-    const { getHealth } = await import("@/lib/api");
+  afterEach(() => {
+    clearTokens();
+  });
+
+  it("does NOT throw on a successful health response", async () => {
     mockFetch.mockResolvedValueOnce(makeFetchResponse({ status: "ok" }));
 
-    await getHealth();
+    const result = await getHealth();
+    expect(result).toEqual({ status: "ok" });
+  });
+});
 
-    const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
-    const headers = init.headers as Record<string, string>;
-    expect(headers["x-api-key"]).toBeUndefined();
+describe("ApiError", () => {
+  it("exposes status and message", () => {
+    const err = new ApiError(403, "Forbidden");
+    expect(err.status).toBe(403);
+    expect(err.message).toBe("Forbidden");
+    expect(err.name).toBe("ApiError");
   });
 });

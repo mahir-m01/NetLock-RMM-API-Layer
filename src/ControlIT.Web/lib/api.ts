@@ -1,3 +1,4 @@
+import { setAccessToken, getAccessToken, clearTokens } from "./auth";
 import type {
   HealthResponse,
   DashboardStats,
@@ -9,60 +10,20 @@ import type {
   ExecuteCommandRequest,
   ExecuteCommandResponse,
   DeviceFilters,
+  LoginRequest,
+  LoginResponse,
+  UserSummary,
+  CreateUserRequest,
+  CreateUserResponse,
+  ChangePasswordRequest,
 } from "./types";
 
-const BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5290";
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5290";
 
-const API_KEY_STORAGE_KEY = "controlit_api_key";
+let _onUnauthenticated: (() => void) | null = null;
 
-function getApiKey(): string {
-  if (typeof window === "undefined") return "";
-  return localStorage.getItem(API_KEY_STORAGE_KEY) ?? "";
-}
-
-export function saveApiKey(key: string): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(API_KEY_STORAGE_KEY, key);
-}
-
-export function readApiKey(): string {
-  return getApiKey();
-}
-
-async function request<T>(
-  path: string,
-  options: RequestInit = {},
-  skipApiKey = false
-): Promise<T> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...(options.headers as Record<string, string> | undefined),
-  };
-
-  if (!skipApiKey) {
-    const key = getApiKey();
-    if (key) {
-      headers["x-api-key"] = key;
-    }
-  }
-
-  const res = await fetch(`${BASE_URL}${path}`, {
-    ...options,
-    headers,
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => res.statusText);
-    throw new ApiError(res.status, text);
-  }
-
-  // Some endpoints may return empty body
-  const contentType = res.headers.get("content-type") ?? "";
-  if (contentType.includes("application/json")) {
-    return res.json() as Promise<T>;
-  }
-  return {} as T;
+export function registerUnauthenticatedCallback(cb: () => void): void {
+  _onUnauthenticated = cb;
 }
 
 export class ApiError extends Error {
@@ -75,7 +36,134 @@ export class ApiError extends Error {
   }
 }
 
-// ─── Endpoints ───────────────────────────────────────────────────────────────
+async function doFetch(path: string, options: RequestInit = {}): Promise<Response> {
+  const token = getAccessToken();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(options.headers as Record<string, string> | undefined),
+  };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  return fetch(`${BASE_URL}${path}`, {
+    ...options,
+    headers,
+    credentials: "include", // always include — needed for refresh cookie
+  });
+}
+
+async function tryRefresh(): Promise<boolean> {
+  try {
+    const res = await fetch(`${BASE_URL}/auth/refresh`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+    });
+    if (!res.ok) return false;
+    const data = (await res.json()) as LoginResponse;
+    setAccessToken(data.accessToken);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function request<T>(path: string, options: RequestInit = {}, skipAuth = false): Promise<T> {
+  let res = await doFetch(path, options);
+
+  // Attempt silent refresh on 401 (unless this IS the refresh/login call)
+  if (res.status === 401 && !skipAuth) {
+    const refreshed = await tryRefresh();
+    if (refreshed) {
+      res = await doFetch(path, options); // retry once with new token
+    } else {
+      clearTokens();
+      _onUnauthenticated?.();
+      throw new ApiError(401, "Session expired. Please log in again.");
+    }
+  }
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    throw new ApiError(res.status, text);
+  }
+
+  const contentType = res.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    return res.json() as Promise<T>;
+  }
+  return {} as T;
+}
+
+// ─── Auth ────────────────────────────────────────────────────────────────────
+
+export async function loginUser(req: LoginRequest): Promise<LoginResponse> {
+  const res = await fetch(`${BASE_URL}/auth/login`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    throw new ApiError(res.status, text);
+  }
+  const data = (await res.json()) as LoginResponse;
+  setAccessToken(data.accessToken);
+  return data;
+}
+
+export async function logoutUser(): Promise<void> {
+  await request<void>("/auth/logout", { method: "POST" }).catch(() => {});
+  clearTokens();
+}
+
+export async function refreshTokenFromCookie(): Promise<LoginResponse | null> {
+  try {
+    const res = await fetch(`${BASE_URL}/auth/refresh`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as LoginResponse;
+    setAccessToken(data.accessToken);
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+export async function changePassword(req: ChangePasswordRequest): Promise<void> {
+  await request<void>("/auth/change-password", {
+    method: "POST",
+    body: JSON.stringify(req),
+  });
+}
+
+// ─── Users ───────────────────────────────────────────────────────────────────
+
+export async function getUsers(): Promise<UserSummary[]> {
+  return request<UserSummary[]>("/users");
+}
+
+export async function createUser(req: CreateUserRequest): Promise<CreateUserResponse> {
+  return request<CreateUserResponse>("/users", {
+    method: "POST",
+    body: JSON.stringify(req),
+  });
+}
+
+export async function patchUser(
+  id: number,
+  updates: Partial<{ isActive: boolean; role: string; tenantId: number | null }>
+): Promise<UserSummary> {
+  return request<UserSummary>(`/users/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(updates),
+  });
+}
+
+// ─── Existing endpoints ───────────────────────────────────────────────────────
 
 export async function getHealth(): Promise<HealthResponse> {
   return request<HealthResponse>("/health", {}, true);

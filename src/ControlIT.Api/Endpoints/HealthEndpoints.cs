@@ -79,6 +79,10 @@ public static class HealthEndpoints
                 ? Results.Json(response, statusCode: 503)
                 : Results.Ok(response);
         });
+
+        // /healthz — thin alias used by Kubernetes liveness probes and platform health checks.
+        // Returns 200 OK with no body when the process is alive.
+        app.MapGet("/healthz", () => Results.Ok(new { status = "alive" })).AllowAnonymous();
         // /health is intentionally exempt from rate limiting so monitoring tools can poll freely.
     }
 }

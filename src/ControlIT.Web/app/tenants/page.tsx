@@ -20,19 +20,19 @@ function TenantCard({ tenant }: { tenant: Tenant }) {
         <p className="font-mono text-xs text-muted-foreground">
           ID: {tenant.id}
         </p>
-        {tenant.deviceCount !== undefined && (
+        {(tenant as unknown as Record<string, unknown>)["deviceCount"] !== undefined && (
           <p className="text-xs text-muted-foreground">
             Devices:{" "}
             <span className="text-foreground font-medium">
-              {tenant.deviceCount}
+              {(tenant as unknown as Record<string, unknown>)["deviceCount"] as number}
             </span>
           </p>
         )}
-        {tenant.createdAt && (
+        {Boolean((tenant as unknown as Record<string, unknown>)["createdAt"]) && (
           <p className="text-xs text-muted-foreground">
             Created:{" "}
             <span className="text-foreground">
-              {new Date(tenant.createdAt).toLocaleDateString("en-GB", {
+              {new Date((tenant as unknown as Record<string, unknown>)["createdAt"] as string).toLocaleDateString("en-GB", {
                 dateStyle: "medium",
               })}
             </span>

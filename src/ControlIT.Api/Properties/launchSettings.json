@@ -6,7 +6,10 @@
       "launchBrowser": false,
       "applicationUrl": "http://localhost:5290",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "CONTROLIT_JWT_SIGNING_KEY": "controlit-local-dev-signing-key-32b!!",
+        "CONTROLIT_BOOTSTRAP_EMAIL": "admin@controlit.local",
+        "CONTROLIT_BOOTSTRAP_PASSWORD": "ControlIT@Dev2026!"
       }
     }
   }

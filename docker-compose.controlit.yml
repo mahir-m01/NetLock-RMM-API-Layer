@@ -1,0 +1,50 @@
+services:
+  controlit-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: controlit-api:latest
+    container_name: controlit-api
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: "http://+:5290"
+      # Connects to the NetLock MySQL container via its static IP on the shared network.
+      # MYSQL_DATABASE and MYSQL_ROOT_PASSWORD come from .env (same file NetLock uses).
+      CONTROLIT_DB_CONNECTION: "Server=172.18.0.3;Port=3306;Database=${MYSQL_DATABASE};User=root;Password=${MYSQL_ROOT_PASSWORD};"
+      Database__Name: "${MYSQL_DATABASE}"
+      CONTROLIT_JWT_SIGNING_KEY: "${CONTROLIT_JWT_SIGNING_KEY}"
+      CONTROLIT_BOOTSTRAP_EMAIL: "${CONTROLIT_BOOTSTRAP_EMAIL}"
+      CONTROLIT_BOOTSTRAP_PASSWORD: "${CONTROLIT_BOOTSTRAP_PASSWORD}"
+      CONTROLIT_NETLOCK_TOKEN: "${CONTROLIT_NETLOCK_TOKEN}"
+      Cors__AllowedOrigins: "http://localhost:3000"
+    ports:
+      - "5290:5290"
+    networks:
+      netlock-network:
+        ipv4_address: 172.18.0.10
+    restart: unless-stopped
+
+  controlit-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        # Browser-side URL — must be reachable from the end-user's machine.
+        NEXT_PUBLIC_API_URL: "http://localhost:5290"
+    image: controlit-web:latest
+    container_name: controlit-web
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+    ports:
+      - "3000:3000"
+    networks:
+      - netlock-network
+    restart: unless-stopped
+    depends_on:
+      - controlit-api
+
+networks:
+  # Reference the network NetLock already created — do not recreate it.
+  netlock-network:
+    external: true

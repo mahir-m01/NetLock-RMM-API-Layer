@@ -1,3 +1,56 @@
+// ─── Auth ────────────────────────────────────────────────────────────────────
+
+export type Role = "SuperAdmin" | "CpAdmin" | "ClientAdmin" | "Technician";
+
+export interface AuthUser {
+  id: number;
+  email: string;
+  role: Role;
+  tenantId: number | null;
+  mustChangePassword: boolean;
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface LoginResponse {
+  accessToken: string;
+  expiresIn: number;
+  user: AuthUser;
+}
+
+export interface UserSummary {
+  id: number;
+  email: string;
+  role: Role;
+  tenantId: number | null;
+  isActive: boolean;
+  mustChangePassword: boolean;
+  createdAt: string;
+  lastLoginAt: string | null;
+}
+
+export interface CreateUserRequest {
+  email: string;
+  role: Role;
+  tenantId: number | null;
+  assignedClients: number[] | null;
+}
+
+export interface CreateUserResponse {
+  id: number;
+  email: string;
+  role: Role;
+  generatedPassword: string;
+}
+
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
 // ─── Health ──────────────────────────────────────────────────────────────────
 
 export interface HealthResponse {
@@ -11,24 +64,22 @@ export interface DashboardStats {
   onlineDevices: number;
   totalTenants: number;
   totalEvents: number;
+  criticalAlerts: number;
 }
 
 // ─── Devices ─────────────────────────────────────────────────────────────────
-
-export type DeviceStatus = "online" | "offline" | string;
 
 export interface Device {
   id: number;
   deviceName: string;
   platform: string;
-  status: DeviceStatus;
+  operatingSystem?: string;
+  ipAddressInternal?: string;
+  cpuUsage?: number;
+  ramUsage?: number;
+  isOnline: boolean;
+  lastAccess?: string;
   tenantId?: number;
-  ipAddress?: string;
-  macAddress?: string;
-  osVersion?: string;
-  agentVersion?: string;
-  lastSeen?: string;
-  createdAt?: string;
   [key: string]: unknown;
 }
 
@@ -37,6 +88,7 @@ export interface DevicesResponse {
   totalCount: number;
   page: number;
   pageSize: number;
+  totalPages: number;
 }
 
 // ─── Events ──────────────────────────────────────────────────────────────────
@@ -62,10 +114,9 @@ export interface EventsResponse {
 
 export interface Tenant {
   id: number;
+  guid: string;
   name: string;
-  createdAt?: string;
-  deviceCount?: number;
-  [key: string]: unknown;
+  locations: unknown[];
 }
 
 // ─── Audit Logs ──────────────────────────────────────────────────────────────

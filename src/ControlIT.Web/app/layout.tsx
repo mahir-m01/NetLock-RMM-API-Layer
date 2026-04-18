@@ -1,23 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { usePathname } from "next/navigation"
 import { Geist, Geist_Mono } from "next/font/google"
 import "./globals.css"
 import { Providers } from "@/components/providers"
 import { AppSidebar } from "@/components/layout/app-sidebar"
 import { SiteHeader } from "@/components/layout/site-header"
-import { ApiKeyGate } from "@/components/shared/api-key-gate"
+import { AuthGate } from "@/components/shared/auth-gate"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog"
-import { saveApiKey, readApiKey } from "@/lib/api"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -29,25 +19,20 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 })
 
-function RootLayoutInner({ children }: { children: React.ReactNode }) {
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  const [keyValue, setKeyValue] = useState("")
+function AppShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname()
+  const isLoginPage = pathname === "/login"
 
-  function handleSettingsOpen() {
-    setKeyValue(readApiKey())
-    setSettingsOpen(true)
-  }
-
-  function handleSave() {
-    const trimmed = keyValue.trim()
-    if (trimmed) {
-      saveApiKey(trimmed)
-    }
-    setSettingsOpen(false)
+  if (isLoginPage) {
+    return (
+      <AuthGate>
+        {children}
+      </AuthGate>
+    )
   }
 
   return (
-    <>
+    <AuthGate>
       <SidebarProvider
         style={
           {
@@ -56,9 +41,9 @@ function RootLayoutInner({ children }: { children: React.ReactNode }) {
           } as React.CSSProperties
         }
       >
-        <AppSidebar variant="inset" onSettingsClick={handleSettingsOpen} />
+        <AppSidebar variant="inset" />
         <SidebarInset>
-          <SiteHeader onSettingsClick={handleSettingsOpen} />
+          <SiteHeader />
           <div className="flex flex-1 flex-col">
             <div className="flex flex-1 flex-col gap-2 p-4">
               {children}
@@ -66,38 +51,7 @@ function RootLayoutInner({ children }: { children: React.ReactNode }) {
           </div>
         </SidebarInset>
       </SidebarProvider>
-
-      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <DialogContent className="bg-card border-border text-foreground">
-          <DialogHeader>
-            <DialogTitle>API Key</DialogTitle>
-            <DialogDescription className="text-muted-foreground">
-              Update the API key used for all requests. Stored in localStorage.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 pt-2">
-            <Input
-              type="password"
-              value={keyValue}
-              onChange={(e) => setKeyValue(e.target.value)}
-              placeholder="Enter API key"
-              className="bg-input border-border text-foreground placeholder:text-muted-foreground"
-              autoComplete="off"
-            />
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="ghost"
-                onClick={() => setSettingsOpen(false)}
-                className="text-muted-foreground hover:text-foreground"
-              >
-                Cancel
-              </Button>
-              <Button onClick={handleSave}>Save</Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </>
+    </AuthGate>
   )
 }
 
@@ -113,9 +67,7 @@ export default function RootLayout({
     >
       <body className="min-h-full bg-background text-foreground">
         <Providers>
-          <ApiKeyGate>
-            <RootLayoutInner>{children}</RootLayoutInner>
-          </ApiKeyGate>
+          <AppShell>{children}</AppShell>
         </Providers>
       </body>
     </html>

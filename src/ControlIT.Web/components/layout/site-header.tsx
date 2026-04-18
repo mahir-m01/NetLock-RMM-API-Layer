@@ -1,12 +1,10 @@
 "use client"
 
 import { usePathname } from "next/navigation"
-import { Settings } from "lucide-react"
 import { useQuery } from "@tanstack/react-query"
 import { getHealth } from "@/lib/api"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
-import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 const ROUTE_TITLES: Record<string, string> = {
@@ -16,6 +14,8 @@ const ROUTE_TITLES: Record<string, string> = {
   "/tenants": "Tenants",
   "/audit": "Audit Logs",
   "/commands": "Commands",
+  "/admin/users": "Users",
+  "/account/change-password": "Change Password",
 }
 
 function usePageTitle(pathname: string): string {
@@ -53,11 +53,7 @@ function HealthDot() {
   )
 }
 
-interface SiteHeaderProps {
-  onSettingsClick?: () => void
-}
-
-export function SiteHeader({ onSettingsClick }: SiteHeaderProps) {
+export function SiteHeader() {
   const pathname = usePathname()
   const title = usePageTitle(pathname)
 
@@ -72,15 +68,6 @@ export function SiteHeader({ onSettingsClick }: SiteHeaderProps) {
         <h1 className="text-base font-medium">{title}</h1>
         <div className="ml-auto flex items-center gap-4">
           <HealthDot />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => onSettingsClick?.()}
-            aria-label="API key settings"
-          >
-            <Settings className="h-4 w-4" />
-          </Button>
         </div>
       </div>
     </header>

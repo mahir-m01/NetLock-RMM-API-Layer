@@ -30,20 +30,6 @@ const PAGE_SIZE = 20;
 
 const PLATFORMS = ["All", "Windows", "Linux", "macOS"];
 
-function StatusBadge({ status }: { status: string }) {
-  const isOnline = status?.toLowerCase() === "online";
-  return (
-    <Badge
-      className={
-        isOnline
-          ? "bg-green-500/20 text-green-400 border-green-500/30"
-          : "bg-red-500/20 text-red-400 border-red-500/30"
-      }
-    >
-      {isOnline ? "Online" : "Offline"}
-    </Badge>
-  );
-}
 
 function SkeletonRows({ count }: { count: number }) {
   return (
@@ -77,7 +63,7 @@ export default function DevicesPage() {
     queryFn: () => getDevices(page, PAGE_SIZE, filters),
   });
 
-  const totalPages = data ? Math.ceil(data.totalCount / PAGE_SIZE) : 1;
+  const totalPages = data?.totalPages ?? (data ? Math.ceil(data.totalCount / PAGE_SIZE) : 1);
 
   function handleSearch(e: React.ChangeEvent<HTMLInputElement>) {
     setSearch(e.target.value);
@@ -164,7 +150,14 @@ export default function DevicesPage() {
                     {device.platform}
                   </TableCell>
                   <TableCell>
-                    <StatusBadge status={device.status} />
+                    <Badge
+                      variant={device.isOnline ? "default" : "secondary"}
+                      className={device.isOnline
+                        ? "bg-green-500/20 text-green-400 border-green-500/30"
+                        : "bg-red-500/20 text-red-400 border-red-500/30"}
+                    >
+                      {device.isOnline ? "Online" : "Offline"}
+                    </Badge>
                   </TableCell>
                   <TableCell>
                     <Button
