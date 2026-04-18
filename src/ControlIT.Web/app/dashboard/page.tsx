@@ -70,7 +70,7 @@ function StatCard({ title, value, icon: Icon, loading, accent = "default" }: Sta
 
 // ─── CPU/RAM usage bar ────────────────────────────────────────────────────────
 
-function UsageBar({ value }: { value: number | undefined }) {
+function UsageBar({ value }: { value: number | null | undefined }) {
   if (value === undefined || value === null) {
     return <span className="text-xs text-muted-foreground">—</span>;
   }

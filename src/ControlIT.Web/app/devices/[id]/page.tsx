@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { getDevice, executeCommand } from "@/lib/api";
@@ -9,13 +9,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -24,15 +17,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Terminal } from "lucide-react";
+import { ArrowLeft, Terminal, X, GripHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface PageProps {
   params: Promise<{ id: string }>;
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const isOnline = status?.toLowerCase() === "online";
+function OnlineBadge({ isOnline }: { isOnline: boolean }) {
   return (
     <Badge
       className={
@@ -46,37 +38,56 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function DetailRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: string | number | undefined;
-}) {
+function DetailRow({ label, value }: { label: string; value: string | number | null | undefined }) {
+  const display =
+    value !== undefined && value !== null && value !== ""
+      ? String(value)
+      : "—";
   return (
     <div className="flex flex-col gap-0.5 py-3 border-b border-border last:border-0">
       <span className="text-xs text-muted-foreground">{label}</span>
-      <span className="text-sm text-foreground font-mono break-all">
-        {value !== undefined && value !== null ? String(value) : "—"}
-      </span>
+      <span className="text-sm text-foreground font-mono break-all">{display}</span>
     </div>
   );
 }
 
-function CommandSheet({
+// ── Floating draggable command window ─────────────────────────────────────────
+function CommandWindow({
   deviceId,
-  open,
-  onOpenChange,
+  isOnline,
+  onClose,
 }: {
   deviceId: string;
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
+  isOnline: boolean;
+  onClose: () => void;
 }) {
   const [command, setCommand] = useState("");
   const [shell, setShell] = useState<Shell>("bash");
   const [timeout, setTimeout] = useState(30);
   const [elapsed, setElapsed] = useState(0);
   const [timerRef, setTimerRef] = useState<ReturnType<typeof setInterval> | null>(null);
+
+  // Drag state
+  const windowRef = useRef<HTMLDivElement>(null);
+  const dragOffset = useRef({ x: 0, y: 0 });
+  const [pos, setPos] = useState({ x: 80, y: 80 });
+  const [dragging, setDragging] = useState(false);
+
+  function onMouseDown(e: React.MouseEvent) {
+    dragOffset.current = { x: e.clientX - pos.x, y: e.clientY - pos.y };
+    setDragging(true);
+
+    function onMove(me: MouseEvent) {
+      setPos({ x: me.clientX - dragOffset.current.x, y: me.clientY - dragOffset.current.y });
+    }
+    function onUp() {
+      setDragging(false);
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -96,28 +107,41 @@ function CommandSheet({
     mutation.mutate();
   }
 
-  const isSuccess = mutation.isSuccess;
-  const isError = mutation.isError;
-  const output =
-    mutation.data?.output ?? mutation.data?.error ?? "";
-  const status = mutation.data?.exitCode;
+  const output = mutation.data?.output ?? mutation.data?.error ?? "";
+  const exitCode = mutation.data?.exitCode;
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="border-l border-border bg-card text-foreground w-full sm:max-w-lg overflow-y-auto">
-        <SheetHeader className="mb-4">
-          <SheetTitle className="text-foreground flex items-center gap-2">
-            <Terminal className="h-4 w-4 text-muted-foreground" />
-            Execute Command
-          </SheetTitle>
-          <SheetDescription className="text-muted-foreground">
-            Run a command on device{" "}
-            <span className="font-mono text-foreground">{deviceId}</span>.
-          </SheetDescription>
-        </SheetHeader>
+    <div
+      ref={windowRef}
+      style={{ left: pos.x, top: pos.y, userSelect: dragging ? "none" : "auto" }}
+      className="fixed z-50 w-[480px] rounded-xl border border-border bg-card shadow-2xl"
+    >
+      {/* Title bar — drag handle */}
+      <div
+        onMouseDown={onMouseDown}
+        className="flex items-center gap-2 px-4 py-3 border-b border-border cursor-grab active:cursor-grabbing select-none rounded-t-xl bg-muted/40"
+      >
+        <GripHorizontal className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+        <Terminal className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+        <span className="text-sm font-medium text-foreground flex-1">Execute Command</span>
+        <span className="text-xs text-muted-foreground font-mono">device {deviceId}</span>
+        <button
+          onClick={onClose}
+          className="ml-2 rounded p-0.5 text-muted-foreground hover:text-foreground hover:bg-muted"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
+      <div className="p-4 space-y-4">
+        {!isOnline && (
+          <div className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
+            Device is offline — commands will be rejected.
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div className="space-y-1.5">
             <label className="text-xs text-muted-foreground" htmlFor="cmd-input">
               Command
             </label>
@@ -125,7 +149,7 @@ function CommandSheet({
               id="cmd-input"
               value={command}
               onChange={(e) => setCommand(e.target.value)}
-              rows={4}
+              rows={3}
               placeholder="e.g. ls -la / or Get-Process"
               className="w-full rounded-md border border-border bg-muted px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none"
               required
@@ -133,29 +157,22 @@ function CommandSheet({
           </div>
 
           <div className="flex gap-3">
-            <div className="flex-1 space-y-2">
+            <div className="flex-1 space-y-1.5">
               <label className="text-xs text-muted-foreground">Shell</label>
-              <Select
-                value={shell}
-                onValueChange={(v) => setShell(v as Shell)}
-              >
-                <SelectTrigger className="border-border bg-muted text-foreground">
+              <Select value={shell} onValueChange={(v) => setShell(v as Shell)}>
+                <SelectTrigger className="border-border bg-muted text-foreground h-9">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="border-border bg-card text-foreground">
-                  <SelectItem value="bash" className="focus:bg-muted">bash</SelectItem>
-                  <SelectItem value="powershell" className="focus:bg-muted">powershell</SelectItem>
-                  <SelectItem value="cmd" className="focus:bg-muted">cmd</SelectItem>
+                  <SelectItem value="bash">bash</SelectItem>
+                  <SelectItem value="powershell">powershell</SelectItem>
+                  <SelectItem value="cmd">cmd</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-
-            <div className="flex-1 space-y-2">
-              <label className="text-xs text-muted-foreground" htmlFor="timeout-input">
-                Timeout: {timeout}s
-              </label>
+            <div className="flex-1 space-y-1.5">
+              <label className="text-xs text-muted-foreground">Timeout: {timeout}s</label>
               <Input
-                id="timeout-input"
                 type="range"
                 min={5}
                 max={120}
@@ -168,7 +185,7 @@ function CommandSheet({
 
           <Button
             type="submit"
-            disabled={mutation.isPending || !command.trim()}
+            disabled={mutation.isPending || !command.trim() || !isOnline}
             className="w-full"
           >
             {mutation.isPending ? (
@@ -182,45 +199,45 @@ function CommandSheet({
           </Button>
         </form>
 
-        {(isSuccess || isError) && (
-          <div className="mt-6 space-y-2">
+        {(mutation.isSuccess || mutation.isError) && (
+          <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground">Output</span>
-              {status !== undefined && (
+              {exitCode !== undefined && (
                 <Badge
                   className={
-                    status === 0
+                    exitCode === 0
                       ? "bg-green-500/20 text-green-400 border-green-500/30"
                       : "bg-red-500/20 text-red-400 border-red-500/30"
                   }
                 >
-                  exit {status}
+                  exit {exitCode}
                 </Badge>
               )}
             </div>
             <pre
               className={cn(
-                "min-h-20 max-h-72 overflow-y-auto whitespace-pre-wrap break-all rounded-lg border px-4 py-3 font-mono text-xs",
-                isError || (status !== undefined && status !== 0)
+                "min-h-16 max-h-56 overflow-y-auto whitespace-pre-wrap break-all rounded-lg border px-3 py-2 font-mono text-xs",
+                mutation.isError || (exitCode !== undefined && exitCode !== 0)
                   ? "border-red-500/30 bg-red-500/10 text-red-300"
                   : "border-green-500/30 bg-green-500/10 text-green-300"
               )}
             >
-              {isError
+              {mutation.isError
                 ? (mutation.error as Error)?.message ?? "Unknown error"
                 : output || "(no output)"}
             </pre>
           </div>
         )}
-      </SheetContent>
-    </Sheet>
+      </div>
+    </div>
   );
 }
 
 export default function DeviceDetailPage({ params }: PageProps) {
   const { id } = use(params);
   const router = useRouter();
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const [windowOpen, setWindowOpen] = useState(false);
 
   const { data: device, isLoading, isError } = useQuery({
     queryKey: ["device", id],
@@ -229,6 +246,7 @@ export default function DeviceDetailPage({ params }: PageProps) {
 
   return (
     <div className="space-y-4">
+      {/* Header row */}
       <div className="flex items-center gap-3">
         <Button
           variant="ghost"
@@ -250,11 +268,8 @@ export default function DeviceDetailPage({ params }: PageProps) {
         </div>
         {device && (
           <div className="ml-auto flex items-center gap-2">
-            <StatusBadge status={device.status as string} />
-            <Button
-              onClick={() => setSheetOpen(true)}
-              size="sm"
-            >
+            <OnlineBadge isOnline={device.isOnline} />
+            <Button onClick={() => setWindowOpen(true)} size="sm">
               <Terminal className="mr-2 h-3.5 w-3.5" />
               Execute Command
             </Button>
@@ -286,23 +301,31 @@ export default function DeviceDetailPage({ params }: PageProps) {
           <CardContent>
             <DetailRow label="Device ID" value={device.id} />
             <DetailRow label="Device Name" value={device.deviceName} />
-            <DetailRow label="Platform" value={device.platform} />
-            <DetailRow label="OS Version" value={device.osVersion as string | undefined} />
-            <DetailRow label="IP Address" value={device.ipAddress as string | undefined} />
-            <DetailRow label="MAC Address" value={device.macAddress as string | undefined} />
             <DetailRow label="Tenant ID" value={device.tenantId} />
-            <DetailRow label="Agent Version" value={device.agentVersion as string | undefined} />
-            <DetailRow label="Last Seen" value={device.lastSeen as string | undefined} />
-            <DetailRow label="Created At" value={device.createdAt as string | undefined} />
+            <DetailRow label="Platform" value={device.platform} />
+            <DetailRow label="OS Version" value={device.operatingSystem} />
+            <DetailRow label="IP Address (Internal)" value={device.ipAddressInternal} />
+            <DetailRow label="IP Address (External)" value={device.ipAddressExternal} />
+            <DetailRow label="CPU" value={device.cpu} />
+            <DetailRow label="RAM" value={device.ram} />
+            <DetailRow label="CPU Usage" value={device.cpuUsage !== null ? `${device.cpuUsage?.toFixed(1)}%` : null} />
+            <DetailRow label="RAM Usage" value={device.ramUsage !== null ? `${device.ramUsage?.toFixed(1)}%` : null} />
+            <DetailRow label="Agent Version" value={device.agentVersion} />
+            <DetailRow
+              label="Last Seen"
+              value={device.lastAccess ? new Date(device.lastAccess).toLocaleString() : null}
+            />
           </CardContent>
         </Card>
       ) : null}
 
-      <CommandSheet
-        deviceId={id}
-        open={sheetOpen}
-        onOpenChange={setSheetOpen}
-      />
+      {windowOpen && device && (
+        <CommandWindow
+          deviceId={id}
+          isOnline={device.isOnline}
+          onClose={() => setWindowOpen(false)}
+        />
+      )}
     </div>
   );
 }

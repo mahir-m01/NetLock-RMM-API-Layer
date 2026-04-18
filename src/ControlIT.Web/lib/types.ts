@@ -71,16 +71,19 @@ export interface DashboardStats {
 
 export interface Device {
   id: number;
+  tenantId: number;
   deviceName: string;
   platform: string;
-  operatingSystem?: string;
-  ipAddressInternal?: string;
-  cpuUsage?: number;
-  ramUsage?: number;
+  operatingSystem: string;
+  ipAddressInternal: string;
+  ipAddressExternal: string;
+  agentVersion: string;
+  cpu: string;
+  ram: string;
+  cpuUsage: number | null;
+  ramUsage: number | null;
   isOnline: boolean;
-  lastAccess?: string;
-  tenantId?: number;
-  [key: string]: unknown;
+  lastAccess: string;
 }
 
 export interface DevicesResponse {

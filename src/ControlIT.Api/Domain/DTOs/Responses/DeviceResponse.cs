@@ -21,21 +21,22 @@ namespace ControlIT.Api.Domain.DTOs.Responses;
 public class DeviceResponse
 {
     public int Id { get; set; }
+    public int TenantId { get; set; }
     public string DeviceName { get; set; } = string.Empty;
     public string Platform { get; set; } = string.Empty;
     public string OperatingSystem { get; set; } = string.Empty;
     public string IpAddressInternal { get; set; } = string.Empty;
+    public string IpAddressExternal { get; set; } = string.Empty;
+    public string AgentVersion { get; set; } = string.Empty;
+    public string Cpu { get; set; } = string.Empty;
+    public string Ram { get; set; } = string.Empty;
 
     // Null when IsOnline = false — stale agent data is not meaningful when offline.
     public double? CpuUsage { get; set; }
-
-    // Null when IsOnline = false — stale agent data is not meaningful when offline.
     public double? RamUsage { get; set; }
 
-    // Computed in ControlItFacade: true if LastAccess >= DateTime.Now.AddMinutes(-5).
-    // This field does NOT exist in the database — it's calculated per-request.
+    // Computed by ControlItFacade from NetLock's live connection set — not stored in DB.
     public bool IsOnline { get; set; }
 
-    // The raw LastAccess timestamp — let the dashboard decide how to display it
     public DateTime LastAccess { get; set; }
 }

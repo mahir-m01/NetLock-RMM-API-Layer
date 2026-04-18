@@ -78,12 +78,16 @@ public class ControlItFacade
             return new DeviceResponse
             {
                 Id = d.Id,
+                TenantId = d.TenantId,
                 DeviceName = d.DeviceName,
                 Platform = d.Platform,
                 OperatingSystem = d.OperatingSystem,
                 IpAddressInternal = d.IpAddressInternal,
+                IpAddressExternal = d.IpAddressExternal,
+                AgentVersion = d.AgentVersion,
+                Cpu = d.Cpu,
+                Ram = d.Ram,
                 IsOnline = isOnline,
-                // Null out resource metrics when offline — stale values are misleading.
                 CpuUsage = isOnline ? d.CpuUsage : null,
                 RamUsage = isOnline ? d.RamUsage : null,
                 LastAccess = d.LastAccess
@@ -113,10 +117,15 @@ public class ControlItFacade
         return new DeviceResponse
         {
             Id = d.Id,
+            TenantId = d.TenantId,
             DeviceName = d.DeviceName,
             Platform = d.Platform,
             OperatingSystem = d.OperatingSystem,
             IpAddressInternal = d.IpAddressInternal,
+            IpAddressExternal = d.IpAddressExternal,
+            AgentVersion = d.AgentVersion,
+            Cpu = d.Cpu,
+            Ram = d.Ram,
             IsOnline = isOnline,
             CpuUsage = isOnline ? d.CpuUsage : null,
             RamUsage = isOnline ? d.RamUsage : null,
