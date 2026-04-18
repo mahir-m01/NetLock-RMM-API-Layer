@@ -99,11 +99,10 @@ export interface DevicesResponse {
 export interface DeviceEvent {
   id: number;
   timestamp: string;
-  eventType: string;
-  deviceId?: number;
+  event: string;
+  severity: string;
   deviceName?: string;
   description?: string;
-  [key: string]: unknown;
 }
 
 export interface EventsResponse {

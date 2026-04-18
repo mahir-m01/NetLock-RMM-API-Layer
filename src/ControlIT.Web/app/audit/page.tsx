@@ -41,7 +41,8 @@ function ResultBadge({ result }: { result: string }) {
       : lower === "timeout"
       ? "bg-orange-500/20 text-orange-400 border-orange-500/30"
       : "bg-red-500/20 text-red-400 border-red-500/30";
-  return <Badge className={className}>{result}</Badge>;
+  const label = result ? result.charAt(0).toUpperCase() + result.slice(1).toLowerCase() : result;
+  return <Badge className={className}>{label}</Badge>;
 }
 
 function ResourceCell({ type, id }: { type: string; id: string | null }) {
@@ -153,8 +154,8 @@ export default function AuditPage() {
                   <TableCell className="text-foreground font-medium text-sm">
                     {log.action}
                   </TableCell>
-                  <TableCell className="font-mono text-xs text-foreground">
-                    {log.actorEmail || "—"}
+                  <TableCell className="font-mono text-xs text-foreground max-w-[160px] truncate" title={log.actorEmail || undefined}>
+                    {log.actorEmail || <span className="text-muted-foreground italic">—</span>}
                   </TableCell>
                   <TableCell>
                     <ResourceCell type={log.resourceType} id={log.resourceId} />
@@ -170,7 +171,7 @@ export default function AuditPage() {
                     <div className="flex flex-col gap-1">
                       <ResultBadge result={log.result} />
                       {log.errorMessage && (
-                        <span className="text-xs text-red-400 font-mono break-all max-w-[200px]">
+                        <span className="text-xs text-red-400 font-mono break-words whitespace-normal block max-w-[220px]">
                           {log.errorMessage}
                         </span>
                       )}

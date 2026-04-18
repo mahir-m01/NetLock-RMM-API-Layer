@@ -23,7 +23,7 @@ function SkeletonRows({ count }: { count: number }) {
     <>
       {Array.from({ length: count }).map((_, i) => (
         <TableRow key={i} className="border-border">
-          {Array.from({ length: 4 }).map((_, j) => (
+          {Array.from({ length: 5 }).map((_, j) => (
             <TableCell key={j}>
               <Skeleton className="h-4 w-full bg-muted" />
             </TableCell>
@@ -68,7 +68,8 @@ export default function EventsPage() {
           <TableHeader>
             <TableRow className="border-border hover:bg-transparent">
               <TableHead className="text-muted-foreground">Timestamp</TableHead>
-              <TableHead className="text-muted-foreground">Event Type</TableHead>
+              <TableHead className="text-muted-foreground">Event</TableHead>
+              <TableHead className="text-muted-foreground">Severity</TableHead>
               <TableHead className="text-muted-foreground">Device</TableHead>
               <TableHead className="text-muted-foreground">Description</TableHead>
             </TableRow>
@@ -79,7 +80,7 @@ export default function EventsPage() {
             ) : data?.items.length === 0 ? (
               <TableRow className="border-border">
                 <TableCell
-                  colSpan={4}
+                  colSpan={5}
                   className="py-10 text-center text-muted-foreground"
                 >
                   No events found.
@@ -95,10 +96,13 @@ export default function EventsPage() {
                     {formatTimestamp(event.timestamp)}
                   </TableCell>
                   <TableCell className="text-foreground font-medium">
-                    {event.eventType}
+                    {event.event || "—"}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-xs">
+                    {event.severity || "—"}
                   </TableCell>
                   <TableCell className="text-foreground">
-                    {event.deviceName ?? event.deviceId ?? "—"}
+                    {event.deviceName ?? "—"}
                   </TableCell>
                   <TableCell className="text-muted-foreground max-w-sm truncate">
                     {event.description ?? "—"}

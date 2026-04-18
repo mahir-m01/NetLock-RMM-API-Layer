@@ -315,8 +315,6 @@ export default function DeviceDetailPage({ params }: PageProps) {
             <DetailRow label="IP Address (Internal)" value={device.ipAddressInternal} />
             <DetailRow label="IP Address (External)" value={device.ipAddressExternal} />
             <DetailRow label="Netbird IP" value="Not configured" dim />
-            <DetailRow label="CPU" value={device.cpu} />
-            <DetailRow label="RAM" value={device.ram} />
             <DetailRow label="CPU Usage" value={device.cpuUsage !== null ? `${device.cpuUsage?.toFixed(1)}%` : null} />
             <DetailRow label="RAM Usage" value={device.ramUsage !== null ? `${device.ramUsage?.toFixed(1)}%` : null} />
             <DetailRow

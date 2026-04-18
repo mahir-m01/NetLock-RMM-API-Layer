@@ -45,6 +45,9 @@ public class MySqlEventRepository : IEventRepository
         //   e._event AS Event    — maps the `_event` column to DeviceEvent.Event
         // The tenant column is tenant_name_snapshot (verified against NetLock's Event_Handler.cs).
         // The JOIN filters by tenant via the tenants table since events has no tenant_id column.
+        // LEFT JOIN so events with an unresolvable tenant_name_snapshot still appear
+        // for SuperAdmin (IsAllTenants=true). For tenanted users the WHERE t.id = @tenantId
+        // clause still filters correctly because NULL != tenantId.
         var tenantFilter = tenantContext.IsAllTenants ? "" : "WHERE t.id = @tenantId";
         var sql = $"""
             SELECT SQL_CALC_FOUND_ROWS
@@ -54,7 +57,7 @@ public class MySqlEventRepository : IEventRepository
                 e._event AS Event,
                 e.description
             FROM events e
-            INNER JOIN tenants t ON t.name = e.tenant_name_snapshot
+            LEFT JOIN tenants t ON t.name = e.tenant_name_snapshot
             {tenantFilter}
             ORDER BY e.date DESC
             LIMIT @limit OFFSET @offset;
@@ -79,14 +82,12 @@ public class MySqlEventRepository : IEventRepository
 
         using var conn = await _factory.CreateConnectionAsync(cancellationToken);
 
-        // Same JOIN pattern as GetAllAsync — filters via tenant name because the events
-        // table has no tenant_id column.
         var tenantFilter = tenantContext.IsAllTenants ? "" : "WHERE t.id = @tenantId";
         return await conn.ExecuteScalarAsync<int>(
             $"""
             SELECT COUNT(*)
             FROM events e
-            INNER JOIN tenants t ON t.name = e.tenant_name_snapshot
+            LEFT JOIN tenants t ON t.name = e.tenant_name_snapshot
             {tenantFilter}
             """,
             new { tenantId = tenantContext.TenantId });
