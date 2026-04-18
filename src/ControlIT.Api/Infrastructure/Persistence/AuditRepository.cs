@@ -34,10 +34,10 @@ public class AuditRepository
         await conn.ExecuteAsync(
             """
             INSERT INTO controlit_audit_log
-                (timestamp, tenant_id, actor_key_id, action, resource_type,
+                (timestamp, tenant_id, actor_key_id, actor_email, action, resource_type,
                  resource_id, ip_address, result, error_message)
             VALUES
-                (@Timestamp, @TenantId, @ActorKeyId, @Action, @ResourceType,
+                (@Timestamp, @TenantId, @ActorKeyId, @ActorEmail, @Action, @ResourceType,
                  @ResourceId, @IpAddress, @Result, @ErrorMessage)
             """,
             entry);
@@ -68,7 +68,7 @@ public class AuditRepository
         var where = conditions.Count > 0 ? string.Join(" AND ", conditions) : "1=1";
         return await conn.QueryAsync<AuditEntry>(
             $"""
-            SELECT id, timestamp, tenant_id, actor_key_id, action, resource_type,
+            SELECT id, timestamp, tenant_id, actor_key_id, actor_email, action, resource_type,
                    resource_id, ip_address, result, error_message
             FROM controlit_audit_log
             WHERE {where}

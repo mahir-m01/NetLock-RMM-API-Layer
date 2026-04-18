@@ -127,13 +127,14 @@ export interface Tenant {
 export interface AuditLog {
   id: number;
   timestamp: string;
+  tenantId: number;
+  actorEmail: string;
   action: string;
-  deviceId?: number;
-  deviceName?: string;
-  tenantId?: number;
-  tenantName?: string;
-  status?: string;
-  [key: string]: unknown;
+  resourceType: string;
+  resourceId: string | null;
+  ipAddress: string | null;
+  result: string;
+  errorMessage: string | null;
 }
 
 // ─── Commands ────────────────────────────────────────────────────────────────

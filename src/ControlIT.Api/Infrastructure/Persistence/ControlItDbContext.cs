@@ -37,6 +37,7 @@ public class ControlItDbContext : DbContext
             entity.Property(e => e.Timestamp).HasColumnName("timestamp");
             entity.Property(e => e.TenantId).HasColumnName("tenant_id");
             entity.Property(e => e.ActorKeyId).HasColumnName("actor_key_id").HasMaxLength(16);
+            entity.Property(e => e.ActorEmail).HasColumnName("actor_email").HasMaxLength(255);
             entity.Property(e => e.Action).HasColumnName("action").HasMaxLength(64);
             entity.Property(e => e.ResourceType).HasColumnName("resource_type").HasMaxLength(64);
             entity.Property(e => e.ResourceId).HasColumnName("resource_id").HasMaxLength(255);

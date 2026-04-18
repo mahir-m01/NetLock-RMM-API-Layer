@@ -10,6 +10,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 namespace ControlIT.Api.Domain.Interfaces;
 
+using ControlIT.Api.Domain.DTOs.Responses;
 using ControlIT.Api.Domain.Models;
 
 public interface IAuditService
@@ -24,6 +25,7 @@ public interface IAuditService
     // Query audit entries for a tenant, optionally filtered by date range.
     // limit/offset provide pagination consistent with the rest of the API.
     // null tenantId = all tenants (SuperAdmin/CpAdmin); scoped users see their tenant only.
-    Task<IEnumerable<AuditEntry>> QueryAsync(
+    // Returns AuditLogResponse DTOs — never the raw domain entity.
+    Task<IEnumerable<AuditLogResponse>> QueryAsync(
         int? tenantId, DateTime? from, DateTime? to, int limit, int offset);
 }

@@ -32,9 +32,12 @@ public class AuditEntry
     // The tenant this audit record belongs to. Always from TenantContext — never from request.
     public int TenantId { get; set; }
 
-    // First 16 characters of the SHA-256 hash of the API key that made this request.
-    // Sufficient for traceability without exposing the full hash or the raw key.
+    // First 16 characters of the SHA-256 hash of the API key that made this request,
+    // or the user's numeric ID for JWT-authenticated actors.
     public string ActorKeyId { get; set; } = string.Empty;
+
+    // Email address of the JWT-authenticated actor. Null for legacy API-key entries.
+    public string? ActorEmail { get; set; }
 
     // What action was performed. Constants: "COMMAND_EXECUTE", "DEVICE_ENROL_MESH",
     // "NETWORK_PEER_DELETE", "ALERT_ACKNOWLEDGE" (Phase 2)

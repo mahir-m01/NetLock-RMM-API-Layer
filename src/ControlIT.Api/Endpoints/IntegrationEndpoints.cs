@@ -45,15 +45,16 @@ public static class IntegrationEndpoints
             INetbirdClient netbird,
             IAuditService audit,
             TenantContext tenant,
-            HttpContext ctx) =>
+            IActorContext actor) =>
         {
             await audit.RecordAsync(new AuditEntry
             {
                 TenantId = tenant.TenantId ?? 0,
-                ActorKeyId = GetActorKeyId(ctx),
+                ActorKeyId = actor.UserId.ToString(),
+                ActorEmail = actor.Email,
                 Action = "DEVICE_ENROL_MESH",
                 ResourceType = "NetworkPeer",
-                IpAddress = ctx.Connection.RemoteIpAddress?.ToString(),
+                IpAddress = actor.IpAddress,
                 Result = "PENDING"
             });
 
@@ -62,10 +63,11 @@ public static class IntegrationEndpoints
             await audit.RecordAsync(new AuditEntry
             {
                 TenantId = tenant.TenantId ?? 0,
-                ActorKeyId = GetActorKeyId(ctx),
+                ActorKeyId = actor.UserId.ToString(),
+                ActorEmail = actor.Email,
                 Action = "DEVICE_ENROL_MESH",
                 ResourceType = "NetworkPeer",
-                IpAddress = ctx.Connection.RemoteIpAddress?.ToString(),
+                IpAddress = actor.IpAddress,
                 Result = "SUCCESS"
             });
 
@@ -78,16 +80,17 @@ public static class IntegrationEndpoints
             INetbirdClient netbird,
             IAuditService audit,
             TenantContext tenant,
-            HttpContext ctx) =>
+            IActorContext actor) =>
         {
             await audit.RecordAsync(new AuditEntry
             {
                 TenantId = tenant.TenantId ?? 0,
-                ActorKeyId = GetActorKeyId(ctx),
+                ActorKeyId = actor.UserId.ToString(),
+                ActorEmail = actor.Email,
                 Action = "NETWORK_PEER_DELETE",
                 ResourceType = "NetworkPeer",
                 ResourceId = id,
-                IpAddress = ctx.Connection.RemoteIpAddress?.ToString(),
+                IpAddress = actor.IpAddress,
                 Result = "PENDING"
             });
 
@@ -96,11 +99,12 @@ public static class IntegrationEndpoints
             await audit.RecordAsync(new AuditEntry
             {
                 TenantId = tenant.TenantId ?? 0,
-                ActorKeyId = GetActorKeyId(ctx),
+                ActorKeyId = actor.UserId.ToString(),
+                ActorEmail = actor.Email,
                 Action = "NETWORK_PEER_DELETE",
                 ResourceType = "NetworkPeer",
                 ResourceId = id,
-                IpAddress = ctx.Connection.RemoteIpAddress?.ToString(),
+                IpAddress = actor.IpAddress,
                 Result = "SUCCESS"
             });
 
@@ -129,16 +133,17 @@ public static class IntegrationEndpoints
                 IWazuhClient wazuh,
                 IAuditService audit,
                 TenantContext tenant,
-                HttpContext ctx) =>
+                IActorContext actor) =>
             {
                 await audit.RecordAsync(new AuditEntry
                 {
                     TenantId = tenant.TenantId ?? 0,
-                    ActorKeyId = GetActorKeyId(ctx),
+                    ActorKeyId = actor.UserId.ToString(),
+                    ActorEmail = actor.Email,
                     Action = "ALERT_ACKNOWLEDGE",
                     ResourceType = "SecurityAlert",
                     ResourceId = alertId,
-                    IpAddress = ctx.Connection.RemoteIpAddress?.ToString(),
+                    IpAddress = actor.IpAddress,
                     Result = "PENDING"
                 });
 
@@ -147,29 +152,17 @@ public static class IntegrationEndpoints
                 await audit.RecordAsync(new AuditEntry
                 {
                     TenantId = tenant.TenantId ?? 0,
-                    ActorKeyId = GetActorKeyId(ctx),
+                    ActorKeyId = actor.UserId.ToString(),
+                    ActorEmail = actor.Email,
                     Action = "ALERT_ACKNOWLEDGE",
                     ResourceType = "SecurityAlert",
                     ResourceId = alertId,
-                    IpAddress = ctx.Connection.RemoteIpAddress?.ToString(),
+                    IpAddress = actor.IpAddress,
                     Result = "SUCCESS"
                 });
 
                 return Results.Ok();
             }).RequireRateLimiting("api").RequireAuthorization("TenantMember");
         }
-    }
-
-    // Returns the first 16 chars of the SHA-256 hash of the API key header.
-    // Shared helper — same implementation as in CommandEndpoints.
-    // Never logs the raw key value — only the hash prefix.
-    private static string GetActorKeyId(HttpContext ctx)
-    {
-        var rawKey = ctx.Request.Headers["x-api-key"].FirstOrDefault() ?? string.Empty;
-        if (string.IsNullOrEmpty(rawKey)) return "unknown";
-        var hash = Convert.ToHexString(
-            System.Security.Cryptography.SHA256.HashData(
-                System.Text.Encoding.UTF8.GetBytes(rawKey)));
-        return hash[..16].ToLowerInvariant();
     }
 }

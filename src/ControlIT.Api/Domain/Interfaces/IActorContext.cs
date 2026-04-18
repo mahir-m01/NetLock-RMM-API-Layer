@@ -9,4 +9,5 @@ public interface IActorContext
     int? TenantId { get; }
     IReadOnlyList<int> AssignedClients { get; }
     string? IpAddress { get; }
+    string Email { get; }
 }

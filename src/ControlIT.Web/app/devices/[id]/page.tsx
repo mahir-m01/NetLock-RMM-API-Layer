@@ -29,7 +29,7 @@ function OnlineBadge({ isOnline }: { isOnline: boolean }) {
     <Badge
       className={
         isOnline
-          ? "bg-green-500/20 text-green-400 border-green-500/30"
+          ? "bg-blue-500/20 text-blue-400 border-blue-500/30"
           : "bg-red-500/20 text-red-400 border-red-500/30"
       }
     >
@@ -38,7 +38,7 @@ function OnlineBadge({ isOnline }: { isOnline: boolean }) {
   );
 }
 
-function DetailRow({ label, value }: { label: string; value: string | number | null | undefined }) {
+function DetailRow({ label, value, dim }: { label: string; value: string | number | null | undefined; dim?: boolean }) {
   const display =
     value !== undefined && value !== null && value !== ""
       ? String(value)
@@ -46,7 +46,7 @@ function DetailRow({ label, value }: { label: string; value: string | number | n
   return (
     <div className="flex flex-col gap-0.5 py-3 border-b border-border last:border-0">
       <span className="text-xs text-muted-foreground">{label}</span>
-      <span className="text-sm text-foreground font-mono break-all">{display}</span>
+      <span className={`text-sm font-mono break-all ${dim ? "text-muted-foreground italic" : "text-foreground"}`}>{display}</span>
     </div>
   );
 }
@@ -67,14 +67,15 @@ function CommandWindow({
   const [elapsed, setElapsed] = useState(0);
   const [timerRef, setTimerRef] = useState<ReturnType<typeof setInterval> | null>(null);
 
-  // Drag state
+  // Drag state — initial position calculated to center the window (480×520px approx)
   const windowRef = useRef<HTMLDivElement>(null);
   const dragOffset = useRef({ x: 0, y: 0 });
-  const [pos, setPos] = useState({ x: 80, y: 80 });
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [dragging, setDragging] = useState(false);
 
   function onMouseDown(e: React.MouseEvent) {
-    dragOffset.current = { x: e.clientX - pos.x, y: e.clientY - pos.y };
+    const current = pos ?? { x: window.innerWidth / 2 - 240, y: window.innerHeight / 2 - 260 };
+    dragOffset.current = { x: e.clientX - current.x, y: e.clientY - current.y };
     setDragging(true);
 
     function onMove(me: MouseEvent) {
@@ -110,30 +111,36 @@ function CommandWindow({
   const output = mutation.data?.output ?? mutation.data?.error ?? "";
   const exitCode = mutation.data?.exitCode;
 
+  // Center on first render
+  const resolvedPos = pos ?? {
+    x: typeof window !== "undefined" ? window.innerWidth / 2 - 240 : 200,
+    y: typeof window !== "undefined" ? window.innerHeight / 2 - 260 : 100,
+  };
+
   return (
     <div
       ref={windowRef}
-      style={{ left: pos.x, top: pos.y, userSelect: dragging ? "none" : "auto" }}
-      className="fixed z-50 w-[480px] rounded-xl border border-border bg-card shadow-2xl"
+      style={{ left: resolvedPos.x, top: resolvedPos.y, userSelect: dragging ? "none" : "auto" }}
+      className="fixed z-50 w-[480px] rounded-xl border border-[#1a1a1a] bg-black shadow-2xl shadow-black/60"
     >
       {/* Title bar — drag handle */}
       <div
         onMouseDown={onMouseDown}
-        className="flex items-center gap-2 px-4 py-3 border-b border-border cursor-grab active:cursor-grabbing select-none rounded-t-xl bg-muted/40"
+        className="flex items-center gap-2 px-4 py-3 border-b border-[#1a1a1a] cursor-grab active:cursor-grabbing select-none rounded-t-xl bg-[#0a0a0a]"
       >
-        <GripHorizontal className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-        <Terminal className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-        <span className="text-sm font-medium text-foreground flex-1">Execute Command</span>
-        <span className="text-xs text-muted-foreground font-mono">device {deviceId}</span>
+        <GripHorizontal className="h-3.5 w-3.5 text-zinc-500 shrink-0" />
+        <Terminal className="h-3.5 w-3.5 text-blue-400 shrink-0" />
+        <span className="text-sm font-medium text-white flex-1">Execute Command</span>
+        <span className="text-xs text-zinc-500 font-mono">device {deviceId}</span>
         <button
           onClick={onClose}
-          className="ml-2 rounded p-0.5 text-muted-foreground hover:text-foreground hover:bg-muted"
+          className="ml-2 rounded p-0.5 text-zinc-500 hover:text-white hover:bg-white/10"
         >
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
 
-      <div className="p-4 space-y-4">
+      <div className="p-4 space-y-4 bg-black rounded-b-xl">
         {!isOnline && (
           <div className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
             Device is offline — commands will be rejected.
@@ -142,7 +149,7 @@ function CommandWindow({
 
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="space-y-1.5">
-            <label className="text-xs text-muted-foreground" htmlFor="cmd-input">
+            <label className="text-xs text-zinc-400" htmlFor="cmd-input">
               Command
             </label>
             <textarea
@@ -151,19 +158,19 @@ function CommandWindow({
               onChange={(e) => setCommand(e.target.value)}
               rows={3}
               placeholder="e.g. ls -la / or Get-Process"
-              className="w-full rounded-md border border-border bg-muted px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+              className="w-full rounded-md border border-[#1a1a1a] bg-[#0a0a0a] px-3 py-2 font-mono text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
               required
             />
           </div>
 
           <div className="flex gap-3">
             <div className="flex-1 space-y-1.5">
-              <label className="text-xs text-muted-foreground">Shell</label>
+              <label className="text-xs text-zinc-400">Shell</label>
               <Select value={shell} onValueChange={(v) => setShell(v as Shell)}>
-                <SelectTrigger className="border-border bg-muted text-foreground h-9">
+                <SelectTrigger className="border-[#1a1a1a] bg-[#0a0a0a] text-white h-9">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="border-border bg-card text-foreground">
+                <SelectContent className="border-[#1a1a1a] bg-black text-white">
                   <SelectItem value="bash">bash</SelectItem>
                   <SelectItem value="powershell">powershell</SelectItem>
                   <SelectItem value="cmd">cmd</SelectItem>
@@ -171,14 +178,14 @@ function CommandWindow({
               </Select>
             </div>
             <div className="flex-1 space-y-1.5">
-              <label className="text-xs text-muted-foreground">Timeout: {timeout}s</label>
+              <label className="text-xs text-zinc-400">Timeout: {timeout}s</label>
               <Input
                 type="range"
                 min={5}
                 max={120}
                 value={timeout}
                 onChange={(e) => setTimeout(Number(e.target.value))}
-                className="h-9 border-border bg-muted"
+                className="h-9 border-[#1a1a1a] bg-[#0a0a0a] accent-blue-500"
               />
             </div>
           </div>
@@ -186,11 +193,11 @@ function CommandWindow({
           <Button
             type="submit"
             disabled={mutation.isPending || !command.trim() || !isOnline}
-            className="w-full"
+            className="w-full bg-blue-600 hover:bg-blue-500 text-white border-0"
           >
             {mutation.isPending ? (
               <span className="flex items-center gap-2">
-                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-background border-t-transparent" />
+                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
                 Running... {elapsed}s
               </span>
             ) : (
@@ -202,12 +209,12 @@ function CommandWindow({
         {(mutation.isSuccess || mutation.isError) && (
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Output</span>
+              <span className="text-xs text-zinc-400">Output</span>
               {exitCode !== undefined && (
                 <Badge
                   className={
                     exitCode === 0
-                      ? "bg-green-500/20 text-green-400 border-green-500/30"
+                      ? "bg-blue-500/20 text-blue-400 border-blue-500/30"
                       : "bg-red-500/20 text-red-400 border-red-500/30"
                   }
                 >
@@ -269,7 +276,7 @@ export default function DeviceDetailPage({ params }: PageProps) {
         {device && (
           <div className="ml-auto flex items-center gap-2">
             <OnlineBadge isOnline={device.isOnline} />
-            <Button onClick={() => setWindowOpen(true)} size="sm">
+            <Button onClick={() => setWindowOpen(true)} size="sm" className="bg-blue-600 hover:bg-blue-500 text-white border-0">
               <Terminal className="mr-2 h-3.5 w-3.5" />
               Execute Command
             </Button>
@@ -304,13 +311,14 @@ export default function DeviceDetailPage({ params }: PageProps) {
             <DetailRow label="Tenant ID" value={device.tenantId} />
             <DetailRow label="Platform" value={device.platform} />
             <DetailRow label="OS Version" value={device.operatingSystem} />
+            <DetailRow label="Agent Version" value={device.agentVersion} />
             <DetailRow label="IP Address (Internal)" value={device.ipAddressInternal} />
             <DetailRow label="IP Address (External)" value={device.ipAddressExternal} />
+            <DetailRow label="Netbird IP" value="Not configured" dim />
             <DetailRow label="CPU" value={device.cpu} />
             <DetailRow label="RAM" value={device.ram} />
             <DetailRow label="CPU Usage" value={device.cpuUsage !== null ? `${device.cpuUsage?.toFixed(1)}%` : null} />
             <DetailRow label="RAM Usage" value={device.ramUsage !== null ? `${device.ramUsage?.toFixed(1)}%` : null} />
-            <DetailRow label="Agent Version" value={device.agentVersion} />
             <DetailRow
               label="Last Seen"
               value={device.lastAccess ? new Date(device.lastAccess).toLocaleString() : null}

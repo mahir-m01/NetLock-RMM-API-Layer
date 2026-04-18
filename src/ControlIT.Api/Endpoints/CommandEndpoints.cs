@@ -33,7 +33,7 @@ public static class CommandEndpoints
             ControlItFacade facade,
             IAuditService audit,
             TenantContext tenant,
-            HttpContext ctx) =>
+            IActorContext actor) =>
         {
             // Clamp timeout: minimum 5s (avoid instant timeouts), maximum 120s (don't hold forever)
             // CommandRequest is a class (not a record), so we set the property directly.
@@ -45,11 +45,12 @@ public static class CommandEndpoints
             await audit.RecordAsync(new AuditEntry
             {
                 TenantId = tenant.TenantId ?? 0,
-                ActorKeyId = GetActorKeyId(ctx),   // First 16 chars of the API key hash
+                ActorKeyId = actor.UserId.ToString(),
+                ActorEmail = actor.Email,
                 Action = "COMMAND_EXECUTE",
                 ResourceType = "Device",
                 ResourceId = req.DeviceId.ToString(),
-                IpAddress = ctx.Connection.RemoteIpAddress?.ToString(),
+                IpAddress = actor.IpAddress,
                 Result = "PENDING"
             });
 
@@ -62,11 +63,12 @@ public static class CommandEndpoints
                 await audit.RecordAsync(new AuditEntry
                 {
                     TenantId = tenant.TenantId ?? 0,
-                    ActorKeyId = GetActorKeyId(ctx),
+                    ActorKeyId = actor.UserId.ToString(),
+                    ActorEmail = actor.Email,
                     Action = "COMMAND_EXECUTE",
                     ResourceType = "Device",
                     ResourceId = req.DeviceId.ToString(),
-                    IpAddress = ctx.Connection.RemoteIpAddress?.ToString(),
+                    IpAddress = actor.IpAddress,
                     Result = "SUCCESS"
                 });
 
@@ -78,11 +80,12 @@ public static class CommandEndpoints
                 await audit.RecordAsync(new AuditEntry
                 {
                     TenantId = tenant.TenantId ?? 0,
-                    ActorKeyId = GetActorKeyId(ctx),
+                    ActorKeyId = actor.UserId.ToString(),
+                    ActorEmail = actor.Email,
                     Action = "COMMAND_EXECUTE",
                     ResourceType = "Device",
                     ResourceId = req.DeviceId.ToString(),
-                    IpAddress = ctx.Connection.RemoteIpAddress?.ToString(),
+                    IpAddress = actor.IpAddress,
                     Result = "TIMEOUT",
                     ErrorMessage = ex.Message
                 });
@@ -99,11 +102,12 @@ public static class CommandEndpoints
                 await audit.RecordAsync(new AuditEntry
                 {
                     TenantId = tenant.TenantId ?? 0,
-                    ActorKeyId = GetActorKeyId(ctx),
+                    ActorKeyId = actor.UserId.ToString(),
+                    ActorEmail = actor.Email,
                     Action = "COMMAND_EXECUTE",
                     ResourceType = "Device",
                     ResourceId = req.DeviceId.ToString(),
-                    IpAddress = ctx.Connection.RemoteIpAddress?.ToString(),
+                    IpAddress = actor.IpAddress,
                     Result = "FAILURE",
                     ErrorMessage = ex.Message
                 });
@@ -115,19 +119,5 @@ public static class CommandEndpoints
                     title: "Service Unavailable");
             }
         }).RequireRateLimiting("commands").RequireAuthorization("CanExecuteCommands");
-    }
-
-    // Returns the first 16 characters of the SHA-256 hash of the API key.
-    // WHY not the full hash: The full hash is 64 chars; 16 is enough for identification.
-    // WHY not the raw key: Never log or store the raw API key — log the hash prefix only.
-    // WHY static: This is a pure function with no state — static avoids unnecessary instance.
-    private static string GetActorKeyId(HttpContext ctx)
-    {
-        var rawKey = ctx.Request.Headers["x-api-key"].FirstOrDefault() ?? string.Empty;
-        if (string.IsNullOrEmpty(rawKey)) return "unknown";
-        var hash = Convert.ToHexString(
-            System.Security.Cryptography.SHA256.HashData(
-                System.Text.Encoding.UTF8.GetBytes(rawKey)));
-        return hash[..16].ToLowerInvariant();
     }
 }

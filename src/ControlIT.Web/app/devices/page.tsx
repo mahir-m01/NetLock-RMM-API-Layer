@@ -153,7 +153,7 @@ export default function DevicesPage() {
                     <Badge
                       variant={device.isOnline ? "default" : "secondary"}
                       className={device.isOnline
-                        ? "bg-green-500/20 text-green-400 border-green-500/30"
+                        ? "bg-blue-500/20 text-blue-400 border-blue-500/30"
                         : "bg-red-500/20 text-red-400 border-red-500/30"}
                     >
                       {device.isOnline ? "Online" : "Offline"}

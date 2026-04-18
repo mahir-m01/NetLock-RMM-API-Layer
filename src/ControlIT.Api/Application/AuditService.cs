@@ -14,6 +14,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 namespace ControlIT.Api.Application;
 
+using ControlIT.Api.Domain.DTOs.Responses;
 using ControlIT.Api.Domain.Interfaces;
 using ControlIT.Api.Domain.Models;
 using ControlIT.Api.Infrastructure.Persistence;
@@ -50,9 +51,22 @@ public class AuditService : IAuditService
         }
     }
 
-    public async Task<IEnumerable<AuditEntry>> QueryAsync(
+    public async Task<IEnumerable<AuditLogResponse>> QueryAsync(
         int? tenantId, DateTime? from, DateTime? to, int limit, int offset)
     {
-        return await _repo.QueryAsync(tenantId, from, to, limit, offset);
+        var entries = await _repo.QueryAsync(tenantId, from, to, limit, offset);
+        return entries.Select(e => new AuditLogResponse
+        {
+            Id = e.Id,
+            Timestamp = e.Timestamp,
+            TenantId = e.TenantId,
+            ActorEmail = e.ActorEmail ?? e.ActorKeyId, // fallback for legacy API-key entries
+            Action = e.Action,
+            ResourceType = e.ResourceType,
+            ResourceId = e.ResourceId,
+            IpAddress = e.IpAddress,
+            Result = e.Result,
+            ErrorMessage = e.ErrorMessage
+        });
     }
 }

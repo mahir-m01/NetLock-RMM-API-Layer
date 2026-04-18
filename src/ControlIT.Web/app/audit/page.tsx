@@ -31,20 +31,26 @@ function formatTimestamp(ts: string) {
   }
 }
 
-function StatusBadge({ status }: { status: string | undefined }) {
-  if (!status) return <span className="text-muted-foreground">—</span>;
-  const isSuccess =
-    status.toLowerCase() === "success" || status.toLowerCase() === "ok";
+function ResultBadge({ result }: { result: string }) {
+  const lower = result?.toLowerCase();
+  const className =
+    lower === "success"
+      ? "bg-blue-500/20 text-blue-400 border-blue-500/30"
+      : lower === "pending"
+      ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"
+      : lower === "timeout"
+      ? "bg-orange-500/20 text-orange-400 border-orange-500/30"
+      : "bg-red-500/20 text-red-400 border-red-500/30";
+  return <Badge className={className}>{result}</Badge>;
+}
+
+function ResourceCell({ type, id }: { type: string; id: string | null }) {
+  if (!id) return <span className="text-muted-foreground">—</span>;
   return (
-    <Badge
-      className={
-        isSuccess
-          ? "bg-green-500/20 text-green-400 border-green-500/30"
-          : "bg-red-500/20 text-red-400 border-red-500/30"
-      }
-    >
-      {status}
-    </Badge>
+    <span className="font-mono text-xs">
+      <span className="text-muted-foreground">{type} </span>
+      <span className="text-foreground">#{id}</span>
+    </span>
   );
 }
 
@@ -53,7 +59,7 @@ function SkeletonRows({ count }: { count: number }) {
     <>
       {Array.from({ length: count }).map((_, i) => (
         <TableRow key={i} className="border-border">
-          {Array.from({ length: 5 }).map((_, j) => (
+          {Array.from({ length: 6 }).map((_, j) => (
             <TableCell key={j}>
               <Skeleton className="h-4 w-full bg-muted" />
             </TableCell>
@@ -71,53 +77,31 @@ export default function AuditPage() {
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["audit-logs", offset, from, to],
-    queryFn: () =>
-      getAuditLogs(
-        PAGE_LIMIT,
-        offset,
-        from || undefined,
-        to || undefined
-      ),
+    queryFn: () => getAuditLogs(PAGE_LIMIT, offset, from || undefined, to || undefined),
   });
 
-  // data is AuditLog[] — length drives pagination UI
   const itemCount = data?.length ?? 0;
   const page = Math.floor(offset / PAGE_LIMIT) + 1;
   const hasNextPage = itemCount === PAGE_LIMIT;
 
-  function handleFromChange(e: React.ChangeEvent<HTMLInputElement>) {
-    setFrom(e.target.value);
-    setOffset(0);
-  }
-
-  function handleToChange(e: React.ChangeEvent<HTMLInputElement>) {
-    setTo(e.target.value);
-    setOffset(0);
-  }
-
   return (
     <div className="space-y-4">
-      {/* Date range filters */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="flex items-center gap-2">
-          <label className="text-xs text-muted-foreground whitespace-nowrap">
-            From
-          </label>
+          <label className="text-xs text-muted-foreground whitespace-nowrap">From</label>
           <Input
             type="datetime-local"
             value={from}
-            onChange={handleFromChange}
+            onChange={(e) => { setFrom(e.target.value); setOffset(0); }}
             className="border-border bg-muted text-foreground [color-scheme:dark]"
           />
         </div>
         <div className="flex items-center gap-2">
-          <label className="text-xs text-muted-foreground whitespace-nowrap">
-            To
-          </label>
+          <label className="text-xs text-muted-foreground whitespace-nowrap">To</label>
           <Input
             type="datetime-local"
             value={to}
-            onChange={handleToChange}
+            onChange={(e) => { setTo(e.target.value); setOffset(0); }}
             className="border-border bg-muted text-foreground [color-scheme:dark]"
           />
         </div>
@@ -126,11 +110,7 @@ export default function AuditPage() {
             variant="ghost"
             size="sm"
             className="text-muted-foreground hover:text-foreground hover:bg-card"
-            onClick={() => {
-              setFrom("");
-              setTo("");
-              setOffset(0);
-            }}
+            onClick={() => { setFrom(""); setTo(""); setOffset(0); }}
           >
             Clear filters
           </Button>
@@ -139,7 +119,7 @@ export default function AuditPage() {
 
       {isError && (
         <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
-          Failed to load audit logs. Check your API key and connection.
+          Failed to load audit logs.
         </div>
       )}
 
@@ -149,9 +129,10 @@ export default function AuditPage() {
             <TableRow className="border-border hover:bg-transparent">
               <TableHead className="text-muted-foreground">Timestamp</TableHead>
               <TableHead className="text-muted-foreground">Action</TableHead>
-              <TableHead className="text-muted-foreground">Device</TableHead>
+              <TableHead className="text-muted-foreground">Actor</TableHead>
+              <TableHead className="text-muted-foreground">Resource</TableHead>
               <TableHead className="text-muted-foreground">Tenant</TableHead>
-              <TableHead className="text-muted-foreground">Status</TableHead>
+              <TableHead className="text-muted-foreground">Result</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -159,33 +140,41 @@ export default function AuditPage() {
               <SkeletonRows count={10} />
             ) : data?.length === 0 ? (
               <TableRow className="border-border">
-                <TableCell
-                  colSpan={5}
-                  className="py-10 text-center text-muted-foreground"
-                >
+                <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
                   No audit logs found.
                 </TableCell>
               </TableRow>
             ) : (
               data?.map((log: AuditLog) => (
-                <TableRow
-                  key={log.id}
-                  className="border-border hover:bg-muted"
-                >
+                <TableRow key={log.id} className="border-border hover:bg-muted/30">
                   <TableCell className="font-mono text-xs text-muted-foreground whitespace-nowrap">
                     {formatTimestamp(log.timestamp)}
                   </TableCell>
-                  <TableCell className="text-foreground font-medium">
+                  <TableCell className="text-foreground font-medium text-sm">
                     {log.action}
                   </TableCell>
-                  <TableCell className="text-foreground">
-                    {log.deviceName ?? log.deviceId ?? "—"}
-                  </TableCell>
-                  <TableCell className="text-foreground">
-                    {log.tenantName ?? log.tenantId ?? "—"}
+                  <TableCell className="font-mono text-xs text-foreground">
+                    {log.actorEmail || "—"}
                   </TableCell>
                   <TableCell>
-                    <StatusBadge status={log.status as string | undefined} />
+                    <ResourceCell type={log.resourceType} id={log.resourceId} />
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-sm">
+                    {log.tenantId === 0 ? (
+                      <span className="text-xs italic text-muted-foreground">Global</span>
+                    ) : (
+                      log.tenantId
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-col gap-1">
+                      <ResultBadge result={log.result} />
+                      {log.errorMessage && (
+                        <span className="text-xs text-red-400 font-mono break-all max-w-[200px]">
+                          {log.errorMessage}
+                        </span>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))

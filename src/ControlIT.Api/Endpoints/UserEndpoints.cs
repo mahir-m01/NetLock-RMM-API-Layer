@@ -45,6 +45,7 @@ public static class UserEndpoints
             {
                 TenantId = actor.TenantId ?? 0,
                 ActorKeyId = actor.UserId.ToString(),
+                ActorEmail = actor.Email,
                 Action = "USER_CREATE",
                 ResourceType = "User",
                 ResourceId = id.ToString(),
@@ -94,6 +95,7 @@ public static class UserEndpoints
             {
                 TenantId = actor.TenantId ?? 0,
                 ActorKeyId = actor.UserId.ToString(),
+                ActorEmail = actor.Email,
                 Action = "USER_UPDATE",
                 ResourceType = "User",
                 ResourceId = id.ToString(),
@@ -124,6 +126,7 @@ public static class UserEndpoints
             {
                 TenantId = actor.TenantId ?? 0,
                 ActorKeyId = actor.UserId.ToString(),
+                ActorEmail = actor.Email,
                 Action = "USER_DEACTIVATE",
                 ResourceType = "User",
                 ResourceId = id.ToString(),
@@ -151,6 +154,7 @@ public static class UserEndpoints
             {
                 TenantId = actor.TenantId ?? 0,
                 ActorKeyId = actor.UserId.ToString(),
+                ActorEmail = actor.Email,
                 Action = "USER_FORCE_PASSWORD_RESET",
                 ResourceType = "User",
                 ResourceId = id.ToString(),

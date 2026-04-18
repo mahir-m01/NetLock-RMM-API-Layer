@@ -29,20 +29,20 @@ interface StatCardProps {
   value: number | undefined;
   icon: React.ElementType;
   loading: boolean;
-  accent?: "green" | "red" | "default";
+  accent?: "blue" | "red" | "default";
 }
 
 function StatCard({ title, value, icon: Icon, loading, accent = "default" }: StatCardProps) {
   const accentClass =
-    accent === "green"
-      ? "text-green-400"
+    accent === "blue"
+      ? "text-blue-400"
       : accent === "red" && (value ?? 0) > 0
       ? "text-red-400"
       : "text-foreground";
 
   const iconClass =
-    accent === "green"
-      ? "text-green-400"
+    accent === "blue"
+      ? "text-blue-400"
       : accent === "red" && (value ?? 0) > 0
       ? "text-red-400"
       : "text-muted-foreground";
@@ -80,7 +80,7 @@ function UsageBar({ value }: { value: number | null | undefined }) {
       ? "bg-red-500"
       : pct > 70
       ? "bg-amber-500"
-      : "bg-green-500";
+      : "bg-blue-500";
   return (
     <div className="flex items-center gap-2">
       <div className="h-1.5 w-16 rounded-full bg-muted overflow-hidden">
@@ -176,7 +176,7 @@ export default function DashboardPage() {
           value={stats?.onlineDevices}
           icon={Wifi}
           loading={statsLoading}
-          accent="green"
+          accent="blue"
         />
         <StatCard
           title="Offline"
@@ -270,7 +270,7 @@ export default function DashboardPage() {
                                 variant={device.isOnline ? "default" : "secondary"}
                                 className={
                                   device.isOnline
-                                    ? "bg-green-500/20 text-green-400 border-green-500/30 text-xs"
+                                    ? "bg-blue-500/20 text-blue-400 border-blue-500/30 text-xs"
                                     : "bg-red-500/20 text-red-400 border-red-500/30 text-xs"
                                 }
                               >
@@ -310,12 +310,12 @@ export default function DashboardPage() {
             <CardContent className="space-y-1 p-0 pb-3">
               {/* NetBird Mesh — placeholder */}
               <div className="flex items-center gap-3 px-4 py-2">
-                <div className="h-4 w-8 rounded-sm bg-green-500 shrink-0" />
+                <div className="h-4 w-8 rounded-sm bg-zinc-700 shrink-0" />
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-foreground">NetBird Mesh</p>
                   <p className="text-xs text-muted-foreground">Phase 2 — not yet connected</p>
                 </div>
-                <Badge className="ml-auto shrink-0 bg-green-500/20 text-green-400 border-green-500/30 text-xs">
+                <Badge className="ml-auto shrink-0 bg-blue-500/20 text-blue-400 border-blue-500/30 text-xs">
                   Placeholder
                 </Badge>
               </div>
@@ -323,7 +323,7 @@ export default function DashboardPage() {
               <div className="flex items-center gap-3 px-4 py-2">
                 <div
                   className={`h-3 w-3 rounded-full shrink-0 ${
-                    isHealthy ? "bg-green-500" : "bg-red-500"
+                    isHealthy ? "bg-blue-500" : "bg-red-500"
                   }`}
                 />
                 <div className="min-w-0">
@@ -335,7 +335,7 @@ export default function DashboardPage() {
                 <Badge
                   className={`ml-auto shrink-0 text-xs ${
                     isHealthy
-                      ? "bg-green-500/20 text-green-400 border-green-500/30"
+                      ? "bg-blue-500/20 text-blue-400 border-blue-500/30"
                       : "bg-red-500/20 text-red-400 border-red-500/30"
                   }`}
                 >
@@ -390,12 +390,21 @@ export default function DashboardPage() {
 
       {/* Row 3 — Placeholder future panels */}
       <div className="grid gap-4 sm:grid-cols-3">
-        <PlaceholderCard
-          icon={Users}
-          title="User Accounts"
-          description="Login and role management — Phase 1"
-          phase="Coming Soon"
-        />
+        <Card className="border-border bg-card">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-blue-400" aria-hidden="true" />
+              <CardTitle className="text-sm font-medium text-foreground">User Accounts</CardTitle>
+            </div>
+            <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 text-xs">Live</Badge>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground mb-3">JWT auth, 4-role RBAC, user management.</p>
+            <Button asChild size="sm" variant="outline" className="w-full border-border text-foreground hover:bg-muted text-xs h-7">
+              <Link href="/admin/users">Manage Users</Link>
+            </Button>
+          </CardContent>
+        </Card>
         <PlaceholderCard
           icon={Shield}
           title="Wazuh Security"
