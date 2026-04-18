@@ -51,10 +51,8 @@ public class AuditService : IAuditService
     }
 
     public async Task<IEnumerable<AuditEntry>> QueryAsync(
-        int tenantId, DateTime? from, DateTime? to, int limit, int offset)
+        int? tenantId, DateTime? from, DateTime? to, int limit, int offset)
     {
-        // Read path delegates directly to the repository.
-        // Exceptions propagate — a failed read should surface as an error to the caller.
         return await _repo.QueryAsync(tenantId, from, to, limit, offset);
     }
 }

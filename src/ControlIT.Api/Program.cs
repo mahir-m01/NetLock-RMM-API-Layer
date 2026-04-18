@@ -9,15 +9,20 @@
 //   5. Endpoint registration BEFORE await app.RunAsync()
 // ─────────────────────────────────────────────────────────────────────────────
 
+using System.Text;
 using Dapper;
 using ControlIT.Api.Application;
+using ControlIT.Api.Domain.Models;
 using ControlIT.Api.Common;
 using ControlIT.Api.Domain.Interfaces;
 using ControlIT.Api.Endpoints;
+using ControlIT.Api.Infrastructure.Auth;
 using ControlIT.Api.Infrastructure.NetLock;
 using ControlIT.Api.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using System.Threading.RateLimiting;
 
 // ── P0 FIX — must be the absolute first statement in Program.cs ──────────────
@@ -187,10 +192,72 @@ builder.Services.AddDbContext<ControlItDbContext>(options =>
     options.UseMySql(cs, ServerVersion.AutoDetect(cs));
 });
 
+// ── Auth — JWT bearer ────────────────────────────────────────────────────
+// CONTROLIT_JWT_SIGNING_KEY is validated at JwtService construction time;
+// we read it here too so AddJwtBearer can share the same key without a
+// circular service dependency.
+var jwtKey = Environment.GetEnvironmentVariable("CONTROLIT_JWT_SIGNING_KEY")
+    ?? throw new InvalidOperationException(
+        "CONTROLIT_JWT_SIGNING_KEY is required. Set it before starting the application.");
+
+if (Encoding.UTF8.GetByteCount(jwtKey) < 32)
+    throw new InvalidOperationException(
+        "CONTROLIT_JWT_SIGNING_KEY must be at least 32 bytes (256 bits).");
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = JwtService.BuildValidationParameters(jwtKey);
+        // Let the pipeline return 401 — endpoints call RequireAuthorization().
+        options.Events = new JwtBearerEvents
+        {
+            OnChallenge = ctx =>
+            {
+                ctx.HandleResponse();
+                ctx.Response.StatusCode = 401;
+                ctx.Response.ContentType = "application/json";
+                return ctx.Response.WriteAsync("{\"error\":\"Unauthorized\"}");
+            }
+        };
+    });
+
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("SuperAdminOnly",
+        p => p.RequireRole(nameof(Role.SuperAdmin)));
+
+    options.AddPolicy("CpAdminOrAbove",
+        p => p.RequireRole(nameof(Role.SuperAdmin), nameof(Role.CpAdmin)));
+
+    options.AddPolicy("TenantMember",
+        p => p.RequireAssertion(ctx =>
+        {
+            // SuperAdmin and CpAdmin have cross-tenant access (no tenant_id claim required).
+            // ClientAdmin and Technician must have a tenant_id claim.
+            var role = ctx.User.FindFirst("role")?.Value;
+            if (role is nameof(Role.SuperAdmin) or nameof(Role.CpAdmin)) return true;
+            return ctx.User.HasClaim(c => c.Type == "tenant_id");
+        }));
+
+    options.AddPolicy("CanExecuteCommands",
+        p => p.RequireRole(
+            nameof(Role.SuperAdmin),
+            nameof(Role.CpAdmin),
+            nameof(Role.Technician)));
+});
+
+// ── Auth — DI registrations ───────────────────────────────────────────────
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<IJwtService, JwtService>();
+builder.Services.AddSingleton<IPasswordHasher, BCryptPasswordHasher>();
+builder.Services.AddScoped<IActorContext, HttpActorContext>();
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+builder.Services.AddScoped<IPasswordResetTokenRepository, PasswordResetTokenRepository>();
+builder.Services.AddHostedService<BootstrapUserSeeder>();
+
 // ── Health checks ─────────────────────────────────────────────────────────
-// Registers the built-in ASP.NET Core health check infrastructure, available at GET /healthz.
-// The custom /health endpoint in HealthEndpoints.cs is the primary health check for this API;
-// this registration provides the framework health system for platform integrations.
 builder.Services.AddHealthChecks();
 
 // ── HTTP clients ──────────────────────────────────────────────────────────
@@ -212,13 +279,16 @@ app.UseMiddleware<ErrorHandlingMiddleware>();     // 1. Catch all unhandled exce
 // WHY first: wraps the entire pipeline so any downstream exception returns a clean JSON error.
 
 app.UseCors();                                   // 2. CORS before auth
-// WHY before auth: preflight OPTIONS requests must succeed without an API key.
+// WHY before auth: preflight OPTIONS requests must succeed without a token.
 
-app.UseMiddleware<ApiKeyMiddleware>();            // 3. Auth + tenant derivation
-// Sets TenantContext.TenantId from DB lookup. /health is exempt.
+// ApiKeyMiddleware is intentionally NOT registered here (Contract 05B.3).
+// The file is retained for one release as a rollback reference.
 
-app.UseRateLimiter();                            // 4. Rate limiting after auth
-// WHY after auth: limits are applied per authenticated client, not per IP.
+app.UseAuthentication();                         // 3. JWT bearer validation
+app.UseAuthorization();                          // 4. Policy enforcement
+
+app.UseRateLimiter();                            // 5. Rate limiting after auth
+// WHY after auth: limits are applied per authenticated identity, not per IP.
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── Schema validation at startup ─────────────────────────────────────────────
@@ -240,6 +310,8 @@ using (var scope = app.Services.CreateScope())
 // Each group registers its routes via its static Map(app) method.
 // This Minimal API pattern is lighter than MVC controllers and avoids
 // reflection-based attribute routing.
+AuthEndpoints.Map(app);
+UserEndpoints.Map(app);
 DeviceEndpoints.Map(app);
 EventEndpoints.Map(app);
 TenantEndpoints.Map(app);

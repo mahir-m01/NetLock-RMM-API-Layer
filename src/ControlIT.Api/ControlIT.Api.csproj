@@ -13,7 +13,9 @@
   <ItemGroup>
     <!-- Dapper: lightweight SQL mapper — think of it as "SQL with auto-mapping to C# classes" -->
     <!-- Used for ALL NetLock table reads (devices, events, tenants, locations, accounts) -->
+    <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
     <PackageReference Include="Dapper" Version="2.1.72" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.0-preview.3.25172.1" />
     <!-- MySqlConnector: the async-first MySQL driver for .NET. Dapper uses this to talk to MySQL -->
     <PackageReference Include="MySqlConnector" Version="2.5.0" />
     <!-- EF Core: full ORM for ControlIT's own tables (controlit_*) only. NOT used for NetLock tables -->

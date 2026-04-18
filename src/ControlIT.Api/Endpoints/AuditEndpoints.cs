@@ -36,6 +36,6 @@ public static class AuditEndpoints
             // Never read tenant_id from a query parameter for audit queries.
             var entries = await audit.QueryAsync(tenant.TenantId, from, to, limit, offset);
             return Results.Ok(entries);
-        }).RequireRateLimiting("api");
+        }).RequireRateLimiting("api").RequireAuthorization("TenantMember");
     }
 }

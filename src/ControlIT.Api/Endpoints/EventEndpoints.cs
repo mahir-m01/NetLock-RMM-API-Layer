@@ -31,6 +31,6 @@ public static class EventEndpoints
 
             var result = await facade.GetEventsAsync(tenant, page, pageSize);
             return Results.Ok(result);
-        }).RequireRateLimiting("api");
+        }).RequireRateLimiting("api").RequireAuthorization("TenantMember");
     }
 }

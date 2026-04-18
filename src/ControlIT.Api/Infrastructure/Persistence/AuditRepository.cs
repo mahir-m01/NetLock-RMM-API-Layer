@@ -45,15 +45,19 @@ public class AuditRepository
 
     // Queries the audit log with optional date range filtering and pagination.
     public async Task<IEnumerable<AuditEntry>> QueryAsync(
-        int tenantId, DateTime? from, DateTime? to, int limit, int offset)
+        int? tenantId, DateTime? from, DateTime? to, int limit, int offset)
     {
         using var conn = await _factory.CreateConnectionAsync();
 
-        // DynamicParameters builds the WHERE clause conditionally,
-        // adding date bounds only when the caller provides them.
-        var conditions = new List<string> { "tenant_id = @tenantId" };
+        var conditions = new List<string>();
         var p = new DynamicParameters();
-        p.Add("tenantId", tenantId);
+
+        // null tenantId = SuperAdmin/CpAdmin; no tenant filter applied.
+        if (tenantId.HasValue)
+        {
+            conditions.Add("tenant_id = @tenantId");
+            p.Add("tenantId", tenantId.Value);
+        }
 
         if (from.HasValue) { conditions.Add("timestamp >= @from"); p.Add("from", from); }
         if (to.HasValue) { conditions.Add("timestamp <= @to"); p.Add("to", to); }
@@ -61,7 +65,7 @@ public class AuditRepository
         p.Add("limit", limit);
         p.Add("offset", offset);
 
-        var where = string.Join(" AND ", conditions);
+        var where = conditions.Count > 0 ? string.Join(" AND ", conditions) : "1=1";
         return await conn.QueryAsync<AuditEntry>(
             $"""
             SELECT id, timestamp, tenant_id, actor_key_id, action, resource_type,

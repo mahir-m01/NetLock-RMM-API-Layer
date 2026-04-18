@@ -1,37 +1,33 @@
-// TenantContext.cs — Per-request tenant scope carrier.
-// Pattern: Ambient Context / Request-Scoped State
-//
-// WHY this exists:
-// Every repository query must be filtered to the current tenant's data.
-// Rather than threading tenantId through every method signature, a Scoped DI object
-// is set once by ApiKeyMiddleware and read by any service that needs it.
-//
-// LIFETIME: Scoped — one instance per HTTP request. Discarded when the request ends.
-// ApiKeyMiddleware sets TenantId once at the start of the pipeline.
-// Repositories, services, and the facade READ from it but never SET it.
-//
-// SECURITY: TenantId is set EXCLUSIVELY inside ApiKeyMiddleware from a database lookup.
-// No code outside ApiKeyMiddleware should ever assign TenantContext.TenantId.
+using ControlIT.Api.Domain.Interfaces;
+using ControlIT.Api.Domain.Models;
 
 namespace ControlIT.Api.Application;
 
 /// <summary>
-/// Scoped per-request ambient context carrying the authenticated tenant's ID.
-/// Set exclusively by ApiKeyMiddleware from the API key DB lookup.
-/// Never set from request parameters, headers, body, or query strings.
+/// Scoped per-request ambient context carrying the authenticated user's tenant scope.
+/// Populated from JWT claims via IActorContext — not from API keys.
 /// </summary>
 public class TenantContext
 {
-    /// <summary>
-    /// The database ID of the authenticated tenant.
-    /// Default 0 = unresolved (ApiKeyMiddleware hasn't run yet or was bypassed).
-    /// </summary>
-    public int TenantId { get; set; }
+    private readonly IActorContext _actor;
+
+    public TenantContext(IActorContext actor) => _actor = actor;
 
     /// <summary>
-    /// True when TenantId has been set from a successful API key lookup.
-    /// Repositories should guard: if (!tenantContext.IsResolved) throw InvalidOperationException.
-    /// This prevents accidental cross-tenant data leaks if middleware is accidentally skipped.
+    /// The authenticated user's tenant ID, or null for SuperAdmin/CpAdmin users
+    /// who have cross-tenant access.
     /// </summary>
-    public bool IsResolved => TenantId > 0;
+    public int? TenantId => _actor.TenantId;
+
+    /// <summary>
+    /// True when the caller has access to all tenants (SuperAdmin or CpAdmin).
+    /// Repositories must not filter by tenant when this is true.
+    /// </summary>
+    public bool IsAllTenants => _actor.Role is Role.SuperAdmin or Role.CpAdmin;
+
+    /// <summary>
+    /// True when the tenant scope has been resolved from a valid JWT.
+    /// Always true when IActorContext is populated correctly by the auth middleware.
+    /// </summary>
+    public bool IsResolved => IsAllTenants || TenantId.HasValue;
 }

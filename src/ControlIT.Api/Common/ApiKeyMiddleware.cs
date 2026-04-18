@@ -112,10 +112,9 @@ public class ApiKeyMiddleware
             _cache[keyHash] = (tenantId.Value, DateTime.UtcNow.AddMinutes(5));
         }
 
-        // CRITICAL: Set TenantContext.TenantId from the DB-derived value ONLY.
-        // This is the ONLY place TenantId is set in the entire application.
-        // All repositories read from this context object — never from request parameters.
-        tenantContext.TenantId = tenantId.Value;
+        // NOTE: ApiKeyMiddleware is retired in Contract 05B. TenantContext now derives
+        // from JWT claims via IActorContext/HttpActorContext. This file is retained for
+        // rollback reference only — it is NOT registered in the pipeline.
 
         // Pass control to the next middleware (rate limiter, then endpoint handler).
         await _next(context);

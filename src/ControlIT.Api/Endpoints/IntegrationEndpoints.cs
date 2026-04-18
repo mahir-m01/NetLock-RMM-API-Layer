@@ -29,14 +29,14 @@ public static class IntegrationEndpoints
         {
             var peers = await netbird.GetPeersAsync();
             return Results.Ok(peers);
-        }).RequireRateLimiting("api");
+        }).RequireRateLimiting("api").RequireAuthorization("TenantMember");
 
         // GET /network/peers/{id} — get a specific peer by Netbird peer ID
         app.MapGet("/network/peers/{id}", async (string id, INetbirdClient netbird) =>
         {
             var peer = await netbird.GetPeerByIdAsync(id);
             return peer is null ? Results.NotFound() : Results.Ok(peer);
-        }).RequireRateLimiting("api");
+        }).RequireRateLimiting("api").RequireAuthorization("TenantMember");
 
         // POST /network/enrol?setupKey=<key> — enrol a new peer in the mesh network
         // Writes audit entries before and after for DPDP compliance.
@@ -49,7 +49,7 @@ public static class IntegrationEndpoints
         {
             await audit.RecordAsync(new AuditEntry
             {
-                TenantId = tenant.TenantId,
+                TenantId = tenant.TenantId ?? 0,
                 ActorKeyId = GetActorKeyId(ctx),
                 Action = "DEVICE_ENROL_MESH",
                 ResourceType = "NetworkPeer",
@@ -61,7 +61,7 @@ public static class IntegrationEndpoints
 
             await audit.RecordAsync(new AuditEntry
             {
-                TenantId = tenant.TenantId,
+                TenantId = tenant.TenantId ?? 0,
                 ActorKeyId = GetActorKeyId(ctx),
                 Action = "DEVICE_ENROL_MESH",
                 ResourceType = "NetworkPeer",
@@ -70,7 +70,7 @@ public static class IntegrationEndpoints
             });
 
             return Results.Ok();
-        }).RequireRateLimiting("api");
+        }).RequireRateLimiting("api").RequireAuthorization("TenantMember");
 
         // DELETE /network/peer/{id} — remove a peer from the mesh network
         app.MapDelete("/network/peer/{id}", async (
@@ -82,7 +82,7 @@ public static class IntegrationEndpoints
         {
             await audit.RecordAsync(new AuditEntry
             {
-                TenantId = tenant.TenantId,
+                TenantId = tenant.TenantId ?? 0,
                 ActorKeyId = GetActorKeyId(ctx),
                 Action = "NETWORK_PEER_DELETE",
                 ResourceType = "NetworkPeer",
@@ -95,7 +95,7 @@ public static class IntegrationEndpoints
 
             await audit.RecordAsync(new AuditEntry
             {
-                TenantId = tenant.TenantId,
+                TenantId = tenant.TenantId ?? 0,
                 ActorKeyId = GetActorKeyId(ctx),
                 Action = "NETWORK_PEER_DELETE",
                 ResourceType = "NetworkPeer",
@@ -105,7 +105,7 @@ public static class IntegrationEndpoints
             });
 
             return Results.NoContent();
-        }).RequireRateLimiting("api");
+        }).RequireRateLimiting("api").RequireAuthorization("TenantMember");
 
         // ── Wazuh — Phase 2 (conditional registration) ───────────────────────
         // These routes are only registered when Wazuh:Enabled = true in config.
@@ -121,7 +121,7 @@ public static class IntegrationEndpoints
             {
                 var alerts = await wazuh.GetAlertsAsync(filter);
                 return Results.Ok(alerts);
-            }).RequireRateLimiting("api");
+            }).RequireRateLimiting("api").RequireAuthorization("TenantMember");
 
             // POST /alerts/acknowledge?alertId=<id> — acknowledge a security alert
             app.MapPost("/alerts/acknowledge", async (
@@ -133,7 +133,7 @@ public static class IntegrationEndpoints
             {
                 await audit.RecordAsync(new AuditEntry
                 {
-                    TenantId = tenant.TenantId,
+                    TenantId = tenant.TenantId ?? 0,
                     ActorKeyId = GetActorKeyId(ctx),
                     Action = "ALERT_ACKNOWLEDGE",
                     ResourceType = "SecurityAlert",
@@ -146,7 +146,7 @@ public static class IntegrationEndpoints
 
                 await audit.RecordAsync(new AuditEntry
                 {
-                    TenantId = tenant.TenantId,
+                    TenantId = tenant.TenantId ?? 0,
                     ActorKeyId = GetActorKeyId(ctx),
                     Action = "ALERT_ACKNOWLEDGE",
                     ResourceType = "SecurityAlert",
@@ -156,7 +156,7 @@ public static class IntegrationEndpoints
                 });
 
                 return Results.Ok();
-            }).RequireRateLimiting("api");
+            }).RequireRateLimiting("api").RequireAuthorization("TenantMember");
         }
     }
 

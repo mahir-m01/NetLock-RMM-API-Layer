@@ -45,7 +45,8 @@ public class MySqlEventRepository : IEventRepository
         //   e._event AS Event    — maps the `_event` column to DeviceEvent.Event
         // The tenant column is tenant_name_snapshot (verified against NetLock's Event_Handler.cs).
         // The JOIN filters by tenant via the tenants table since events has no tenant_id column.
-        var sql = """
+        var tenantFilter = tenantContext.IsAllTenants ? "" : "WHERE t.id = @tenantId";
+        var sql = $"""
             SELECT SQL_CALC_FOUND_ROWS
                 e.id, e.device_id, e.tenant_name_snapshot AS TenantName, e.device_name,
                 e.date AS Timestamp,
@@ -54,7 +55,7 @@ public class MySqlEventRepository : IEventRepository
                 e.description
             FROM events e
             INNER JOIN tenants t ON t.name = e.tenant_name_snapshot
-            WHERE t.id = @tenantId
+            {tenantFilter}
             ORDER BY e.date DESC
             LIMIT @limit OFFSET @offset;
             SELECT FOUND_ROWS();
@@ -80,12 +81,13 @@ public class MySqlEventRepository : IEventRepository
 
         // Same JOIN pattern as GetAllAsync — filters via tenant name because the events
         // table has no tenant_id column.
+        var tenantFilter = tenantContext.IsAllTenants ? "" : "WHERE t.id = @tenantId";
         return await conn.ExecuteScalarAsync<int>(
-            """
+            $"""
             SELECT COUNT(*)
             FROM events e
             INNER JOIN tenants t ON t.name = e.tenant_name_snapshot
-            WHERE t.id = @tenantId
+            {tenantFilter}
             """,
             new { tenantId = tenantContext.TenantId });
     }

@@ -31,7 +31,7 @@ public static class DashboardEndpoints
         {
             var summary = await facade.GetDashboardSummaryAsync(tenant);
             return Results.Ok(summary);
-        }).RequireRateLimiting("api");
+        }).RequireRateLimiting("api").RequireAuthorization("TenantMember");
 
         // GET /sync/stream
         // Server-Sent Events endpoint. Keeps the HTTP connection open and pushes
@@ -78,6 +78,6 @@ public static class DashboardEndpoints
             {
                 // Client disconnected — normal exit, no error to propagate.
             }
-        }).RequireRateLimiting("api");
+        }).RequireRateLimiting("api").RequireAuthorization("TenantMember");
     }
 }

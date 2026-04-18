@@ -22,7 +22,7 @@ public static class TenantEndpoints
         {
             var tenants = await repo.GetAllAsync();
             return Results.Ok(tenants);
-        }).RequireRateLimiting("api");
+        }).RequireRateLimiting("api").RequireAuthorization("TenantMember");
 
         // GET /tenants/{id} — get a specific tenant with its locations.
         // Uses QueryMultipleAsync internally for one DB round-trip.
@@ -30,7 +30,7 @@ public static class TenantEndpoints
         {
             var tenant = await repo.GetByIdAsync(id);
             return tenant is null ? Results.NotFound() : Results.Ok(tenant);
-        }).RequireRateLimiting("api");
+        }).RequireRateLimiting("api").RequireAuthorization("TenantMember");
 
         // GET /tenants/{id}/locations — locations for a specific tenant.
         // Separate endpoint so the dashboard can load locations without the full tenant.
@@ -39,6 +39,6 @@ public static class TenantEndpoints
         {
             var locations = await repo.GetLocationsByTenantAsync(id);
             return Results.Ok(locations);
-        }).RequireRateLimiting("api");
+        }).RequireRateLimiting("api").RequireAuthorization("TenantMember");
     }
 }

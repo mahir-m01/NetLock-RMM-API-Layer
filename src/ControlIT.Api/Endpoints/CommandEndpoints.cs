@@ -44,7 +44,7 @@ public static class CommandEndpoints
             // that the command was attempted. "No audit trail" is worse than a PENDING entry.
             await audit.RecordAsync(new AuditEntry
             {
-                TenantId = tenant.TenantId,
+                TenantId = tenant.TenantId ?? 0,
                 ActorKeyId = GetActorKeyId(ctx),   // First 16 chars of the API key hash
                 Action = "COMMAND_EXECUTE",
                 ResourceType = "Device",
@@ -61,7 +61,7 @@ public static class CommandEndpoints
                 // Write SUCCESS audit entry after successful execution.
                 await audit.RecordAsync(new AuditEntry
                 {
-                    TenantId = tenant.TenantId,
+                    TenantId = tenant.TenantId ?? 0,
                     ActorKeyId = GetActorKeyId(ctx),
                     Action = "COMMAND_EXECUTE",
                     ResourceType = "Device",
@@ -77,7 +77,7 @@ public static class CommandEndpoints
                 // Device didn't respond in time — write TIMEOUT audit entry.
                 await audit.RecordAsync(new AuditEntry
                 {
-                    TenantId = tenant.TenantId,
+                    TenantId = tenant.TenantId ?? 0,
                     ActorKeyId = GetActorKeyId(ctx),
                     Action = "COMMAND_EXECUTE",
                     ResourceType = "Device",
@@ -98,7 +98,7 @@ public static class CommandEndpoints
                 // Hub not connected, device not found, or duplicate command in flight.
                 await audit.RecordAsync(new AuditEntry
                 {
-                    TenantId = tenant.TenantId,
+                    TenantId = tenant.TenantId ?? 0,
                     ActorKeyId = GetActorKeyId(ctx),
                     Action = "COMMAND_EXECUTE",
                     ResourceType = "Device",
@@ -114,7 +114,7 @@ public static class CommandEndpoints
                     statusCode: 503,
                     title: "Service Unavailable");
             }
-        }).RequireRateLimiting("commands");  // Stricter rate limit for commands
+        }).RequireRateLimiting("commands").RequireAuthorization("CanExecuteCommands");
     }
 
     // Returns the first 16 characters of the SHA-256 hash of the API key.

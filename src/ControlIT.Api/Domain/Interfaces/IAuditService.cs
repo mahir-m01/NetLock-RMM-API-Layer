@@ -23,6 +23,7 @@ public interface IAuditService
 
     // Query audit entries for a tenant, optionally filtered by date range.
     // limit/offset provide pagination consistent with the rest of the API.
+    // null tenantId = all tenants (SuperAdmin/CpAdmin); scoped users see their tenant only.
     Task<IEnumerable<AuditEntry>> QueryAsync(
-        int tenantId, DateTime? from, DateTime? to, int limit, int offset);
+        int? tenantId, DateTime? from, DateTime? to, int limit, int offset);
 }

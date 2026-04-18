@@ -31,17 +31,20 @@ public class MySqlDeviceRepository : IDeviceRepository
         DeviceFilter filter, TenantContext tenantContext,
         CancellationToken cancellationToken = default)
     {
-        // Guard: TenantContext must be resolved before any query. An unresolved context
-        // indicates a middleware configuration bug, not a user error.
         if (!tenantContext.IsResolved)
             throw new InvalidOperationException("TenantContext not resolved before repository access.");
 
         using var conn = await _factory.CreateConnectionAsync(cancellationToken);
 
-        // Parameters are always bound via DynamicParameters — never string interpolation.
-        var conditions = new List<string> { "d.tenant_id = @tenantId" };
+        var conditions = new List<string>();
         var p = new DynamicParameters();
-        p.Add("tenantId", tenantContext.TenantId);
+
+        // SuperAdmin/CpAdmin see all tenants; scoped users see their tenant only.
+        if (!tenantContext.IsAllTenants)
+        {
+            conditions.Add("d.tenant_id = @tenantId");
+            p.Add("tenantId", tenantContext.TenantId);
+        }
 
         // Conditionally add filters — only if the caller provided them.
         if (!string.IsNullOrWhiteSpace(filter.Platform))
@@ -63,7 +66,7 @@ public class MySqlDeviceRepository : IDeviceRepository
             p.Add("search", $"%{filter.SearchTerm}%");
         }
 
-        var where = string.Join(" AND ", conditions);
+        var where = conditions.Count > 0 ? string.Join(" AND ", conditions) : "1=1";
         var offset = (filter.Page - 1) * filter.PageSize;
 
         p.Add("pageSize", filter.PageSize);
@@ -101,17 +104,16 @@ public class MySqlDeviceRepository : IDeviceRepository
 
         using var conn = await _factory.CreateConnectionAsync(cancellationToken);
 
-        // WHERE includes both id AND tenant_id — prevents a tenant from accessing another
-        // tenant's devices by guessing a numeric ID.
+        var tenantFilter = tenantContext.IsAllTenants ? "" : "AND d.tenant_id = @tenantId";
         return await conn.QueryFirstOrDefaultAsync<Device>(
-            """
+            $"""
             SELECT d.id, d.tenant_id, d.location_id, d.device_name, d.access_key,
                    d.platform, d.operating_system, d.agent_version,
                    d.cpu, d.cpu_usage, d.ram, d.ram_usage,
                    d.ip_address_internal, d.ip_address_external,
                    d.last_access, d.authorized, d.synced
             FROM devices d
-            WHERE d.id = @id AND d.tenant_id = @tenantId
+            WHERE d.id = @id {tenantFilter}
             """,
             new { id, tenantId = tenantContext.TenantId });
     }
@@ -125,14 +127,11 @@ public class MySqlDeviceRepository : IDeviceRepository
 
         using var conn = await _factory.CreateConnectionAsync(cancellationToken);
 
-        // Lightweight query — only access_key. The facade intersects this with
-        // NetLock's live connected-device list to compute online count and IsOnline flags.
+        if (tenantContext.IsAllTenants)
+            return await conn.QueryAsync<string>("SELECT access_key FROM devices");
+
         return await conn.QueryAsync<string>(
-            """
-            SELECT access_key
-            FROM devices
-            WHERE tenant_id = @tenantId
-            """,
+            "SELECT access_key FROM devices WHERE tenant_id = @tenantId",
             new { tenantId = tenantContext.TenantId });
     }
 
@@ -145,14 +144,9 @@ public class MySqlDeviceRepository : IDeviceRepository
 
         using var conn = await _factory.CreateConnectionAsync(cancellationToken);
 
-        // The tenant_id check ensures access_key can only be retrieved for devices within
-        // the caller's tenant. Returns null on not-found; callers handle the null case.
+        var tenantFilter = tenantContext.IsAllTenants ? "" : "AND tenant_id = @tenantId";
         return await conn.ExecuteScalarAsync<string?>(
-            """
-            SELECT access_key
-            FROM devices
-            WHERE id = @deviceId AND tenant_id = @tenantId
-            """,
+            $"SELECT access_key FROM devices WHERE id = @deviceId {tenantFilter}",
             new { deviceId, tenantId = tenantContext.TenantId });
     }
 }

@@ -29,7 +29,7 @@ public static class DeviceEndpoints
         {
             var result = await facade.GetDevicesAsync(filter, tenant);
             return Results.Ok(result);
-        }).RequireRateLimiting("api");
+        }).RequireRateLimiting("api").RequireAuthorization("TenantMember");
 
         // GET /devices/{id} — {id:int} route constraint rejects non-integer values with 400.
         app.MapGet("/devices/{id:int}", async (
@@ -39,7 +39,7 @@ public static class DeviceEndpoints
         {
             var device = await facade.GetDeviceByIdAsync(id, tenant);
             return device is null ? Results.NotFound() : Results.Ok(device);
-        }).RequireRateLimiting("api");
+        }).RequireRateLimiting("api").RequireAuthorization("TenantMember");
 
         // GET /devices/metrics — returns just TotalDevices and OnlineDevices
         // Used by the dashboard for the device count widget without a full device list.
@@ -54,6 +54,6 @@ public static class DeviceEndpoints
                 summary.TotalDevices,
                 summary.OnlineDevices
             });
-        }).RequireRateLimiting("api");
+        }).RequireRateLimiting("api").RequireAuthorization("TenantMember");
     }
 }
