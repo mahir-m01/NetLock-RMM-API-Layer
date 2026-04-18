@@ -138,13 +138,14 @@ public class ControlItFacade
     public async Task<DashboardSummary> GetDashboardSummaryAsync(
         TenantContext tenant, CancellationToken ct = default)
     {
-        // Run all three independent reads in parallel.
-        var devicesTask      = _devices.GetAllAsync(new DeviceFilter { PageSize = 1 }, tenant, ct);
-        var accessKeysTask   = _devices.GetAllAccessKeysAsync(tenant, ct);
+        // Run all independent reads in parallel.
+        var devicesTask       = _devices.GetAllAsync(new DeviceFilter { PageSize = 1 }, tenant, ct);
+        var accessKeysTask    = _devices.GetAllAccessKeysAsync(tenant, ct);
         var connectedKeysTask = _netLockAdmin.GetConnectedAccessKeysAsync(ct);
-        var eventsTask       = _events.GetAllAsync(tenant, 1, 0, ct);
+        var eventsTask        = _events.GetAllAsync(tenant, 1, 0, ct);
+        var tenantsTask       = _tenants.CountAsync(ct);
 
-        await Task.WhenAll(devicesTask, accessKeysTask, connectedKeysTask, eventsTask);
+        await Task.WhenAll(devicesTask, accessKeysTask, connectedKeysTask, eventsTask, tenantsTask);
 
         var (_, totalDevices) = devicesTask.Result;
         var (_, totalEvents)  = eventsTask.Result;
@@ -157,12 +158,12 @@ public class ControlItFacade
 
         return new DashboardSummary
         {
-            TotalDevices  = totalDevices,
-            OnlineDevices = onlineCount,
-            TotalTenants  = 1,    // Phase 1: single-tenant architecture
-            TotalEvents   = totalEvents,
+            TotalDevices   = totalDevices,
+            OnlineDevices  = onlineCount,
+            TotalTenants   = tenantsTask.Result,
+            TotalEvents    = totalEvents,
             CriticalAlerts = 0,   // Phase 2: Wazuh integration
-            ServerTime    = DateTime.UtcNow
+            ServerTime     = DateTime.UtcNow
         };
     }
 

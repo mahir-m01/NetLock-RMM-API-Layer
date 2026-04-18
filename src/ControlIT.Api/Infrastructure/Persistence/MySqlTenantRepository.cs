@@ -33,6 +33,12 @@ public class MySqlTenantRepository : ITenantRepository
             "SELECT id, guid, name FROM tenants ORDER BY name");
     }
 
+    public async Task<int> CountAsync(CancellationToken cancellationToken = default)
+    {
+        using var conn = await _factory.CreateConnectionAsync(cancellationToken);
+        return await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM tenants");
+    }
+
     public async Task<Tenant?> GetByIdAsync(int id,
         CancellationToken cancellationToken = default)
     {

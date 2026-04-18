@@ -14,6 +14,9 @@ public interface ITenantRepository
     // Returns all tenants. Phase 1 is single-tenant but the interface supports multi.
     Task<IEnumerable<Tenant>> GetAllAsync(CancellationToken cancellationToken = default);
 
+    // Returns the total number of tenants — used by the dashboard KPI card.
+    Task<int> CountAsync(CancellationToken cancellationToken = default);
+
     // Returns a tenant with its locations pre-populated via QueryMultipleAsync.
     // Returns null if not found — never throws a "not found" exception.
     Task<Tenant?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
