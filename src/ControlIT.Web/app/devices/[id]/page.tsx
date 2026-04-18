@@ -51,7 +51,11 @@ function DetailRow({ label, value, dim }: { label: string; value: string | numbe
   );
 }
 
-// ── Floating draggable command window ─────────────────────────────────────────
+// ── Resize handle edges ────────────────────────────────────────────────────────
+type ResizeEdge = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
+
+
+// ── Floating draggable + resizable command window ──────────────────────────────
 function CommandWindow({
   deviceId,
   isOnline,
@@ -67,22 +71,63 @@ function CommandWindow({
   const [elapsed, setElapsed] = useState(0);
   const [timerRef, setTimerRef] = useState<ReturnType<typeof setInterval> | null>(null);
 
-  // Drag state — initial position calculated to center the window (480×520px approx)
-  const windowRef = useRef<HTMLDivElement>(null);
-  const dragOffset = useRef({ x: 0, y: 0 });
-  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
-  const [dragging, setDragging] = useState(false);
+  const MIN_W = 360;
+  const MIN_H = 300;
 
-  function onMouseDown(e: React.MouseEvent) {
-    const current = pos ?? { x: window.innerWidth / 2 - 240, y: window.innerHeight / 2 - 260 };
-    dragOffset.current = { x: e.clientX - current.x, y: e.clientY - current.y };
-    setDragging(true);
+  // Position and size — null means "not yet set, use centered defaults"
+  const [rect, setRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const [interacting, setInteracting] = useState(false);
+
+  const resolvedRect = rect ?? (typeof window !== "undefined"
+    ? { x: window.innerWidth / 2 - 240, y: window.innerHeight / 2 - 260, w: 480, h: 520 }
+    : { x: 200, y: 100, w: 480, h: 520 });
+
+  // ── Drag title bar ───────────────────────────────────────────────────────────
+  function onTitleMouseDown(e: React.MouseEvent) {
+    e.preventDefault();
+    const start = { mx: e.clientX, my: e.clientY, rx: resolvedRect.x, ry: resolvedRect.y };
+    setInteracting(true);
 
     function onMove(me: MouseEvent) {
-      setPos({ x: me.clientX - dragOffset.current.x, y: me.clientY - dragOffset.current.y });
+      setRect((r) => {
+        const base = r ?? resolvedRect;
+        return { ...base, x: start.rx + me.clientX - start.mx, y: start.ry + me.clientY - start.my };
+      });
     }
     function onUp() {
-      setDragging(false);
+      setInteracting(false);
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+
+  // ── Resize edges ─────────────────────────────────────────────────────────────
+  function onResizeMouseDown(e: React.MouseEvent, edge: ResizeEdge) {
+    e.preventDefault();
+    e.stopPropagation();
+    const start = {
+      mx: e.clientX, my: e.clientY,
+      rx: resolvedRect.x, ry: resolvedRect.y,
+      rw: resolvedRect.w, rh: resolvedRect.h,
+    };
+    setInteracting(true);
+
+    function onMove(me: MouseEvent) {
+      const dx = me.clientX - start.mx;
+      const dy = me.clientY - start.my;
+      setRect(() => {
+        let { rx: x, ry: y, rw: w, rh: h } = start;
+        if (edge.includes("e")) w = Math.max(MIN_W, w + dx);
+        if (edge.includes("s")) h = Math.max(MIN_H, h + dy);
+        if (edge.includes("w")) { const nw = Math.max(MIN_W, w - dx); x += w - nw; w = nw; }
+        if (edge.includes("n")) { const nh = Math.max(MIN_H, h - dy); y += h - nh; h = nh; }
+        return { x, y, w, h };
+      });
+    }
+    function onUp() {
+      setInteracting(false);
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     }
@@ -111,22 +156,41 @@ function CommandWindow({
   const output = mutation.data?.output ?? mutation.data?.error ?? "";
   const exitCode = mutation.data?.exitCode;
 
-  // Center on first render
-  const resolvedPos = pos ?? {
-    x: typeof window !== "undefined" ? window.innerWidth / 2 - 240 : 200,
-    y: typeof window !== "undefined" ? window.innerHeight / 2 - 260 : 100,
-  };
+  const EDGE = 6; // hit-area thickness in px
 
   return (
     <div
-      ref={windowRef}
-      style={{ left: resolvedPos.x, top: resolvedPos.y, userSelect: dragging ? "none" : "auto" }}
-      className="fixed z-50 w-[480px] rounded-xl border border-[#1a1a1a] bg-black shadow-2xl shadow-black/60"
+      style={{
+        left: resolvedRect.x,
+        top: resolvedRect.y,
+        width: resolvedRect.w,
+        height: resolvedRect.h,
+        userSelect: interacting ? "none" : "auto",
+      }}
+      className="fixed z-50 flex flex-col rounded-xl border border-[#1a1a1a] bg-black shadow-2xl shadow-black/60 overflow-hidden"
     >
+      {/* ── Edge / corner resize handles ─────────────────────────────────── */}
+      {/* N */ }
+      <div onMouseDown={(e) => onResizeMouseDown(e, "n")}  style={{ position:"absolute", top:0,    left:EDGE,  right:EDGE,  height:EDGE, cursor:"n-resize",  zIndex:10 }} />
+      {/* S */}
+      <div onMouseDown={(e) => onResizeMouseDown(e, "s")}  style={{ position:"absolute", bottom:0, left:EDGE,  right:EDGE,  height:EDGE, cursor:"s-resize",  zIndex:10 }} />
+      {/* W */}
+      <div onMouseDown={(e) => onResizeMouseDown(e, "w")}  style={{ position:"absolute", top:EDGE, left:0,    bottom:EDGE, width:EDGE,  cursor:"w-resize",  zIndex:10 }} />
+      {/* E */}
+      <div onMouseDown={(e) => onResizeMouseDown(e, "e")}  style={{ position:"absolute", top:EDGE, right:0,   bottom:EDGE, width:EDGE,  cursor:"e-resize",  zIndex:10 }} />
+      {/* NW */}
+      <div onMouseDown={(e) => onResizeMouseDown(e, "nw")} style={{ position:"absolute", top:0,    left:0,    width:EDGE,  height:EDGE, cursor:"nw-resize", zIndex:11 }} />
+      {/* NE */}
+      <div onMouseDown={(e) => onResizeMouseDown(e, "ne")} style={{ position:"absolute", top:0,    right:0,   width:EDGE,  height:EDGE, cursor:"ne-resize", zIndex:11 }} />
+      {/* SW */}
+      <div onMouseDown={(e) => onResizeMouseDown(e, "sw")} style={{ position:"absolute", bottom:0, left:0,    width:EDGE,  height:EDGE, cursor:"sw-resize", zIndex:11 }} />
+      {/* SE */}
+      <div onMouseDown={(e) => onResizeMouseDown(e, "se")} style={{ position:"absolute", bottom:0, right:0,   width:EDGE,  height:EDGE, cursor:"se-resize", zIndex:11 }} />
+
       {/* Title bar — drag handle */}
       <div
-        onMouseDown={onMouseDown}
-        className="flex items-center gap-2 px-4 py-3 border-b border-[#1a1a1a] cursor-grab active:cursor-grabbing select-none rounded-t-xl bg-[#0a0a0a]"
+        onMouseDown={onTitleMouseDown}
+        className="flex shrink-0 items-center gap-2 px-4 py-3 border-b border-[#1a1a1a] cursor-grab active:cursor-grabbing select-none bg-[#0a0a0a]"
       >
         <GripHorizontal className="h-3.5 w-3.5 text-zinc-500 shrink-0" />
         <Terminal className="h-3.5 w-3.5 text-blue-400 shrink-0" />
@@ -140,7 +204,8 @@ function CommandWindow({
         </button>
       </div>
 
-      <div className="p-4 space-y-4 bg-black rounded-b-xl">
+      {/* Scrollable body */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-black">
         {!isOnline && (
           <div className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
             Device is offline — commands will be rejected.

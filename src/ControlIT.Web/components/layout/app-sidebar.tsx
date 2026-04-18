@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
 import {
   LayoutDashboard,
@@ -96,7 +97,8 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
               asChild
               className="data-[slot=sidebar-menu-button]:!p-1.5"
             >
-              <Link href="/dashboard">
+              <Link href="/dashboard" className="flex items-center gap-2">
+                <Image src="/logo.png" alt="ControlIT" width={24} height={24} className="rounded-md shrink-0" />
                 <span className="text-base font-semibold">ControlIT</span>
               </Link>
             </SidebarMenuButton>
