@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { getDashboard, getDevices, getHealth } from "@/lib/api";
+import { getDashboard, getDevices } from "@/lib/api";
 import type { Device } from "@/lib/types";
 import {
   Monitor,
@@ -16,11 +16,13 @@ import {
   Users,
   Shield,
   Network,
+  Server,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useAuth } from "@/components/providers/auth-provider";
 
 // ─── KPI stat card ────────────────────────────────────────────────────────────
 
@@ -122,6 +124,8 @@ function PlaceholderCard({ icon: Icon, title, description, phase }: PlaceholderC
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role === "SuperAdmin";
   const {
     data: stats,
     isLoading: statsLoading,
@@ -141,19 +145,10 @@ export default function DashboardPage() {
     refetchInterval: 30_000,
   });
 
-  const { data: healthData } = useQuery({
-    queryKey: ["health"],
-    queryFn: getHealth,
-    refetchInterval: 15_000,
-  });
-
   const offlineDevices =
     stats !== undefined
       ? (stats.totalDevices ?? 0) - (stats.onlineDevices ?? 0)
       : undefined;
-
-  const isHealthy = healthData?.status?.toLowerCase() === "ok" ||
-    healthData?.status?.toLowerCase() === "healthy";
 
   return (
     <div className="space-y-6">
@@ -298,94 +293,58 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* Right: Two stacked panels (1/3 width) */}
-        <div className="space-y-4">
-          {/* Panel A — NetBird Connectivity */}
-          <Card className="border-border bg-card">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold text-foreground">
-                Connectivity
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-1 p-0 pb-3">
-              {/* NetBird Mesh — placeholder */}
-              <div className="flex items-center gap-3 px-4 py-2">
-                <div className="h-4 w-8 rounded-sm bg-zinc-700 shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-foreground">NetBird Mesh</p>
-                  <p className="text-xs text-muted-foreground">Phase 2 — not yet connected</p>
-                </div>
-                <Badge className="ml-auto shrink-0 bg-blue-500/20 text-blue-400 border-blue-500/30 text-xs">
-                  Placeholder
-                </Badge>
-              </div>
-              {/* NetLock Hub — live health */}
-              <div className="flex items-center gap-3 px-4 py-2">
-                <div
-                  className={`h-3 w-3 rounded-full shrink-0 ${
-                    isHealthy ? "bg-blue-500" : "bg-red-500"
-                  }`}
-                />
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-foreground">NetLock Hub</p>
-                  <p className="text-xs text-muted-foreground">
-                    {healthData ? (isHealthy ? "API reachable" : "API unreachable") : "Checking…"}
-                  </p>
-                </div>
-                <Badge
-                  className={`ml-auto shrink-0 text-xs ${
-                    isHealthy
-                      ? "bg-blue-500/20 text-blue-400 border-blue-500/30"
-                      : "bg-red-500/20 text-red-400 border-red-500/30"
-                  }`}
-                >
-                  {isHealthy ? "Online" : "Offline"}
-                </Badge>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Panel B — Quick Actions */}
-          <Card className="border-border bg-card">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold text-foreground">
-                Quick Actions
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
+        {/* Right: Quick Actions (1/3 width) */}
+        <Card className="border-border bg-card">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold text-foreground">
+              Quick Actions
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <Button
+              asChild
+              variant="outline"
+              className="w-full justify-start border-border text-foreground hover:bg-muted text-sm"
+            >
+              <Link href="/commands">
+                <Terminal className="mr-2 h-4 w-4" />
+                Execute Command
+              </Link>
+            </Button>
+            <Button
+              asChild
+              variant="outline"
+              className="w-full justify-start border-border text-foreground hover:bg-muted text-sm"
+            >
+              <Link href="/audit">
+                <ClipboardList className="mr-2 h-4 w-4" />
+                View Audit Log
+              </Link>
+            </Button>
+            <Button
+              asChild
+              variant="outline"
+              className="w-full justify-start border-border text-foreground hover:bg-muted text-sm"
+            >
+              <Link href="/devices">
+                <Monitor className="mr-2 h-4 w-4" />
+                View All Devices
+              </Link>
+            </Button>
+            {isSuperAdmin && (
               <Button
                 asChild
                 variant="outline"
                 className="w-full justify-start border-border text-foreground hover:bg-muted text-sm"
               >
-                <Link href="/commands">
-                  <Terminal className="mr-2 h-4 w-4" />
-                  Execute Command
+                <Link href="/admin/system">
+                  <Server className="mr-2 h-4 w-4" />
+                  System Health
                 </Link>
               </Button>
-              <Button
-                asChild
-                variant="outline"
-                className="w-full justify-start border-border text-foreground hover:bg-muted text-sm"
-              >
-                <Link href="/audit">
-                  <ClipboardList className="mr-2 h-4 w-4" />
-                  View Audit Log
-                </Link>
-              </Button>
-              <Button
-                asChild
-                variant="outline"
-                className="w-full justify-start border-border text-foreground hover:bg-muted text-sm"
-              >
-                <Link href="/devices">
-                  <Monitor className="mr-2 h-4 w-4" />
-                  View All Devices
-                </Link>
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       {/* Row 3 — Placeholder future panels */}

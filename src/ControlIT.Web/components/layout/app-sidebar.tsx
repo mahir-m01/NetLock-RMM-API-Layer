@@ -13,6 +13,7 @@ import {
   Users,
   LogOut,
   KeyRound,
+  Server,
 } from "lucide-react"
 import {
   Sidebar,
@@ -38,6 +39,7 @@ const BASE_NAV_ITEMS = [
 ]
 
 const ADMIN_NAV_ITEM = { title: "Users", url: "/admin/users", icon: Users }
+const SUPERADMIN_NAV_ITEM = { title: "System Health", url: "/admin/system", icon: Server }
 
 function ResizeHandle() {
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -78,7 +80,12 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const { user, logout } = useAuth()
 
   const isAdminRole = user?.role === "SuperAdmin" || user?.role === "CpAdmin"
-  const navItems = isAdminRole ? [...BASE_NAV_ITEMS, ADMIN_NAV_ITEM] : BASE_NAV_ITEMS
+  const isSuperAdmin = user?.role === "SuperAdmin"
+  const navItems = [
+    ...BASE_NAV_ITEMS,
+    ...(isAdminRole ? [ADMIN_NAV_ITEM] : []),
+    ...(isSuperAdmin ? [SUPERADMIN_NAV_ITEM] : []),
+  ]
 
   return (
     <Sidebar collapsible="offcanvas" {...props} style={{ position: "relative" }}>

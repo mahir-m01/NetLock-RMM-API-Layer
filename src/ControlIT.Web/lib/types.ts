@@ -156,6 +156,28 @@ export interface ExecuteCommandResponse {
   [key: string]: unknown;
 }
 
+// ─── System Health ───────────────────────────────────────────────────────────
+
+export interface ComponentHealth {
+  status: "healthy" | "degraded" | "unhealthy";
+  latencyMs?: number;
+  detail?: string;
+}
+
+export interface SystemHealthResponse {
+  status: "healthy" | "degraded" | "unhealthy";
+  checkedAt: string;
+  mysql: ComponentHealth;
+  signalR: ComponentHealth;
+  netBird: ComponentHealth;
+  api: {
+    version: string;
+    environment: string;
+    uptime: string;
+    connectedDevices: number;
+  };
+}
+
 // ─── Pagination ───────────────────────────────────────────────────────────────
 
 export interface PaginationParams {

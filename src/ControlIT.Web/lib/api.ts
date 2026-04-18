@@ -1,6 +1,7 @@
 import { setAccessToken, getAccessToken, clearTokens } from "./auth";
 import type {
   HealthResponse,
+  SystemHealthResponse,
   DashboardStats,
   DevicesResponse,
   Device,
@@ -167,6 +168,10 @@ export async function patchUser(
 
 export async function getHealth(): Promise<HealthResponse> {
   return request<HealthResponse>("/health", {}, true);
+}
+
+export async function getSystemHealth(): Promise<SystemHealthResponse> {
+  return request<SystemHealthResponse>("/admin/system-health");
 }
 
 export async function getDashboard(): Promise<DashboardStats> {

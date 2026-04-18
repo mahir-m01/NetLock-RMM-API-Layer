@@ -342,6 +342,7 @@ CommandEndpoints.Map(app);
 DashboardEndpoints.Map(app);
 AuditEndpoints.Map(app);
 HealthEndpoints.Map(app);
+SystemHealthEndpoints.Map(app);
 IntegrationEndpoints.Map(app);
 // ─────────────────────────────────────────────────────────────────────────────
 
