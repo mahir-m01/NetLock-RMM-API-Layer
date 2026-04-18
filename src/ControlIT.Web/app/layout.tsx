@@ -40,12 +40,13 @@ function AppShell({ children }: { children: React.ReactNode }) {
             "--header-height": "calc(var(--spacing) * 12)",
           } as React.CSSProperties
         }
+        className="h-screen overflow-hidden"
       >
         <AppSidebar variant="inset" />
-        <SidebarInset>
+        <SidebarInset className="flex flex-col h-screen overflow-hidden">
           <SiteHeader />
-          <div className="flex flex-1 flex-col">
-            <div className="flex flex-1 flex-col gap-2 p-4">
+          <div className="flex-1 overflow-y-auto">
+            <div className="flex flex-col gap-2 p-4 pb-8">
               {children}
             </div>
           </div>
@@ -65,7 +66,7 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
     >
-      <body className="min-h-full bg-background text-foreground">
+      <body className="h-screen overflow-hidden bg-background text-foreground">
         <Providers>
           <AppShell>{children}</AppShell>
         </Providers>

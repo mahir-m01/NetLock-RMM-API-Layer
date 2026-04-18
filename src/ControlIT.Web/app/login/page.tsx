@@ -68,7 +68,7 @@ export default function LoginPage() {
                 placeholder="you@example.com"
                 value={email}
                 onChange={(e) => { setEmail(e.target.value); setError(""); }}
-                className="border-[#1a1a1a] bg-[#111111] text-white placeholder:text-zinc-600 focus-visible:ring-blue-500"
+                className="border-[#1a1a1a] bg-[#111111] text-white placeholder:text-zinc-600 focus-visible:ring-1 focus-visible:ring-blue-500"
                 autoComplete="email"
                 autoFocus
                 disabled={isLoading}
@@ -85,7 +85,7 @@ export default function LoginPage() {
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => { setPassword(e.target.value); setError(""); }}
-                className="border-[#1a1a1a] bg-[#111111] text-white placeholder:text-zinc-600 focus-visible:ring-blue-500"
+                className="border-[#1a1a1a] bg-[#111111] text-white placeholder:text-zinc-600 focus-visible:ring-1 focus-visible:ring-blue-500"
                 autoComplete="current-password"
                 disabled={isLoading}
               />

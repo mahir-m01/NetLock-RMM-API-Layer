@@ -52,7 +52,7 @@ function StatCard({ title, value, icon: Icon, loading, accent = "default" }: Sta
   return (
     <Card className="border-border bg-card">
       <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+        <CardTitle className="text-xs font-semibold text-foreground/70 uppercase tracking-wide">
           {title}
         </CardTitle>
         <Icon className={`h-4 w-4 ${iconClass}`} aria-hidden="true" />
