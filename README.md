@@ -136,6 +136,16 @@ Install both agents per device:
 1. NetLock agent from NetLock console tenant installer.
 2. NetBird agent using tenant setup key.
 
+For internal/agent testing, use the included Debian Lima VM instead of enrolling personal laptops or random machines:
+
+```bash
+brew install lima
+limactl start debian-test.yaml
+limactl shell debian-test
+```
+
+Inside the VM, run the NetLock tenant installer from the NetLock console, then run the NetBird setup-key command for the same tenant. This gives a clean disposable test endpoint for dashboard, command, and NetBird peer validation.
+
 Linux NetBird example:
 
 ```bash
