@@ -6,6 +6,14 @@ This repo contains the ASP.NET Core API, the local Docker stack for running NetL
 
 ---
 
+## Installation / Alpha Release
+
+Use the [`production`](https://github.com/mahir-m01/NetLock-RMM-API-Layer/tree/production) branch for alpha release setup, Docker Compose files, generated credentials flow, and install instructions.
+
+This `main` branch is kept as the project overview branch with architecture notes, diagrams, and development context.
+
+---
+
 ## Architecture
 
 ```mermaid
