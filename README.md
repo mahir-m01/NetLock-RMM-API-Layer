@@ -1,230 +1,195 @@
-# ControlIT - NetLock RMM API Layer
+# ControlIT Alpha Release
 
-ControlIT is a typed REST API layer built on top of NetLock RMM, designed for managed service providers who need programmatic access to their endpoint fleet without calling NetLock's internal APIs directly. It reads from NetLock's MySQL database, dispatches real-time commands through its SignalR hub, and adds its own tenant management and audit trail tables to the shared database.
+ControlIT is a business-facing control layer for NetLock RMM with NetBird network visibility. It gives operators one dashboard for device status, live updates, command execution, tenant setup keys, and NetBird peer mapping.
 
-This repo contains the ASP.NET Core API, the local Docker stack for running NetLock RMM on Apple Silicon, and a Debian Lima VM for agent testing.
+This `production` branch is for alpha testers and deployment validation only. Architecture diagrams, university project material, and deep API documentation live on `main` / `dev`.
 
-For production-demo setup, generated credentials, one-time migrations, NetBird modes, and rotation steps, see [RELEASE.md](RELEASE.md).
+## What This Release Includes
 
----
+- ControlIT API and dashboard.
+- NetLock integration without editing NetLock source.
+- NetBird Cloud or self-hosted NetBird integration.
+- Generated bootstrap admin credentials during setup.
+- One-time ControlIT database migrations.
+- Least-privilege runtime database user.
+- Push dashboard updates through SSE.
+- Tenant-scoped NetBird setup key and peer mapping flow.
 
-## Architecture
+## Requirements
 
-```mermaid
-graph TD
-    Client["Next.js Dashboard"]
+- Docker + Docker Compose.
+- MySQL/NetLock stack from this repo or existing compatible NetLock deployment.
+- NetBird account or self-hosted NetBird management server.
+- NetBird personal access token with management API access.
+- Linux x86_64 host recommended for real demos.
 
-    subgraph ControlIT API Layer
-        MW["ApiKeyMiddleware\nauth + tenant derivation"]
-        Facade["ControlItFacade\nbusiness logic"]
-        Repos["Repositories\nIDeviceRepository\nIEventRepository\nITenantRepository"]
-        Audit["AuditService\nwrite-only audit log"]
-        Dispatcher["SignalRCommandDispatcher\ncommand transport"]
-    end
-
-    subgraph NetLock RMM
-        Hub["SignalR commandHub"]
-        DB["MySQL\nnetlockrmm + controlit_* tables"]
-        Agent["NetLock Agent\non managed device"]
-    end
-
-    Client -->|"x-api-key header"| MW
-    MW --> Facade
-    Facade --> Repos
-    Facade --> Dispatcher
-    Facade --> Audit
-    Repos -->|Dapper| DB
-    Audit -->|EF Core| DB
-    Dispatcher -->|SignalR| Hub
-    Hub -->|command| Agent
-    Agent -->|result| Hub
-    Hub -->|device_id nlocksep output| Dispatcher
-```
-
-### Use Case Overview
-
-![UC1 - ControlIT Overall Use Case Diagram](diagrams/uc1-overall.png)
-
----
-
-## What it does
-
-- Lists and filters managed endpoints across all client tenants
-- Dispatches remote shell commands to endpoints in real time via NetLock's SignalR hub
-- Correlates command responses by `device_id` - one pending command per device, 409 on collision
-- Enforces tenant isolation at every query - all data is scoped to the authenticated tenant
-- Maintains a full audit log for every command attempt (DPDP Act 2023)
-- Provides a dashboard summary with live online device counts
-
-Current alpha covers NetLock RMM plus NetBird network visibility/enrollment paths. Wazuh remains Phase 2.
-
----
-
-## Stack
-
-| Layer | Technology |
-|---|---|
-| API runtime | ASP.NET Core 10 - Minimal APIs |
-| NetLock reads | Dapper + MySqlConnector |
-| ControlIT tables | EF Core + Pomelo |
-| Real-time commands | Microsoft.AspNetCore.SignalR.Client |
-| Database | MySQL 8.0 (shared with NetLock) |
-| Auth | SHA-256 hashed API keys - tenant derived from DB, never from request |
-
----
-
-## API Endpoints
-
-[![Run in Postman](https://run.pstmn.io/button.svg)](https://app.getpostman.com/run-collection/48552836-8ec181d0-6951-4946-bc7a-9e55f4bc7fd0)
-
-| Method | Path | Description |
-|---|---|---|
-| GET | `/health` | Service health - MySQL and SignalR status |
-| GET | `/devices` | Paginated device list with optional filters |
-| GET | `/devices/{id}` | Single device detail |
-| GET | `/dashboard` | Summary counts - total, online, events |
-| GET | `/events` | Paginated event log |
-| GET | `/tenants` | Tenant list |
-| POST | `/commands/execute` | Dispatch shell command to a device via SignalR |
-| GET | `/audit/logs` | Audit trail query with date range and pagination |
-
-The Postman collection includes all 18 requests with test scripts, pre-configured query params, and request bodies. After importing, select the **Local Dev** environment and set `base_url` to `http://localhost:5290` with your API key.
-
----
-
-## Project Structure
-
-```
-NetLock-RMM-API-Layer/
-- src/ControlIT.Api/
-  - Application/       Facade, TenantContext, AuditService, Notifications
-  - Domain/            Interfaces, Models, DTOs
-  - Infrastructure/    MySql repositories, NetLock SignalR service, EF context
-  - Endpoints/         Minimal API route handlers
-  - Common/            Middleware (ApiKeyMiddleware, ErrorHandlingMiddleware)
-  - Migrations/        EF Core migrations for controlit_* tables
-- tests/ControlIT.Api.Tests/
-  - Unit/              SignalRCommandDispatcher, TenantContext
-  - Integration/       Health endpoint via WebApplicationFactory
-- diagrams/            UML diagrams - render on GitHub
-- docker-compose.yml   Local NetLock RMM stack
-- debian-test.yaml     Lima VM for local agent testing
-```
-
----
-
-## Diagrams
-
-| Diagram | Description |
-|---|---|
-| [UC1 - Overall System](diagrams/uc1-overall.md) | All actors and use cases across the full platform |
-| [UC2 - API Layer](diagrams/uc2-api-layer.md) | REST endpoints, middleware, and external integrations |
-| [Class Diagram](diagrams/class-01-netlockrmm.md) | OOP structure, interfaces, and design patterns |
-| [ER Diagram](diagrams/er-01-netlockrmm.md) | Database schema - NetLock tables and ControlIT owned tables |
-| [Sequence - Execute Command](diagrams/seq-01-execute-command.md) | Full flow for `POST /commands/execute` |
-
----
-
-## Local Development
-
-### Prerequisites
+macOS local demo:
 
 ```bash
 brew install colima docker docker-compose
-```
-
-Wire the Compose plugin to Docker CLI (one-time):
-
-```bash
-mkdir -p ~/.docker/cli-plugins
-ln -sfn /opt/homebrew/opt/docker-compose/bin/docker-compose ~/.docker/cli-plugins/docker-compose
-```
-
-### Containers
-
-| Container | Image | Port | Purpose |
-|---|---|---|---|
-| `mysql-container` | `mysql:8.0` | `3306` | Database (native arm64) |
-| `netlock-rmm-server` | `nicomak101/netlock-rmm-server` | `7080` / `7082` | Backend |
-| `netlock-rmm-web-console` | `nicomak101/netlock-rmm-web-console` | `8080` | Blazor admin UI |
-
-The two NetLock images are amd64-only and run under Rosetta 2 emulation via Colima. MySQL runs natively on arm64.
-
-### Start Colima
-
-Run after every Mac restart:
-
-```bash
 colima start --arch aarch64 --vm-type vz --vz-rosetta --cpu 4 --memory 6
 ```
 
-### Start the stack
+## Fresh Install
+
+1. Clone production branch:
+
+```bash
+git clone -b production https://github.com/mahir-m01/NetLock-RMM-API-Layer.git
+cd NetLock-RMM-API-Layer
+```
+
+2. Generate environment and bootstrap credentials:
 
 ```bash
 ./scripts/setup-controlit-env.sh
+```
+
+This creates `.env`, generates passwords/signing keys, and prints initial SuperAdmin login once. Save it securely, then change password after first login.
+
+3. Fill required `.env` values:
+
+```bash
+CONTROLIT_NETLOCK_TOKEN=<remote_session_token from NetLock accounts table>
+CONTROLIT_NETLOCK_FILES_KEY=<NetLock files_api_key>
+NETBIRD_BASE_URL=https://api.netbird.io
+NETBIRD_TOKEN=<NetBird personal access token>
+```
+
+For self-hosted NetBird, replace `NETBIRD_BASE_URL` with your management API URL.
+
+4. Start NetLock and MySQL:
+
+```bash
 docker compose up -d
 ```
 
-Allow 2-3 minutes on first boot. MySQL runs a healthcheck before NetLock containers start.
+Wait until MySQL and NetLock are healthy.
 
-ControlIT production/demo runtime uses a least-privilege database user. Run EF migrations once with privileged credentials, then create/use the runtime user:
+5. Run ControlIT migrations once:
 
 ```bash
 ./scripts/run-controlit-migrations.sh
+```
+
+6. Create least-privilege runtime DB user:
+
+```bash
 ./scripts/apply-controlit-db-user.sh
+```
+
+7. Start ControlIT API and dashboard:
+
+```bash
 docker compose -f docker-compose.controlit.yml up -d --build
 ```
 
-### Run the API
+8. Verify:
 
 ```bash
-dotnet run --project src/ControlIT.Api/ControlIT.Api.csproj --launch-profile http
+curl -f http://localhost:5290/health/ready
+curl -f http://localhost:3000
 ```
 
-### Access
+Open dashboard:
 
-| Service | URL |
+```text
+http://localhost:3000
+```
+
+Login using bootstrap SuperAdmin credentials printed by setup script.
+
+## Existing NetBird Customer Setup
+
+Use this when customer already has NetBird groups and devices.
+
+1. Add NetBird API values to `.env`.
+2. Login as SuperAdmin or CpAdmin.
+3. Open Network page.
+4. Pick tenant.
+5. Bind existing NetBird group in external/read-only mode.
+
+Modes:
+
+| Mode | Use |
 |---|---|
-| ControlIT API | http://localhost:5290 |
-| NetLock Web Console | http://localhost:8080 |
-| NetLock Server | http://localhost:7080 |
+| `external` | Customer-owned group. ControlIT reads and maps peers, but does not manage ownership. |
+| `read_only` | Visibility-only demo. No ControlIT changes to group/policy. |
+| `managed` | ControlIT-created tenant group/policy for new deployments. |
 
----
+## New NetBird Tenant Setup
 
-## Test Agent - Debian Lima VM
+Use this when ControlIT should create the tenant network path.
 
-A Debian 12 (ARM64) Lima VM for testing the NetLock Linux agent locally.
+1. Login as elevated admin.
+2. Open Network page.
+3. Select tenant.
+4. Create setup key.
+5. Copy raw key immediately. It is shown once only.
+6. Install NetBird agent on device with that key.
+7. Link NetBird peer to NetLock device from Network page.
+
+## Device Install Pattern
+
+Install both agents per device:
+
+1. NetLock agent from NetLock console tenant installer.
+2. NetBird agent using tenant setup key.
+
+Linux NetBird example:
 
 ```bash
-brew install lima
-limactl start debian-test.yaml
-limactl shell debian-test
+curl -fsSL https://pkgs.netbird.io/install.sh | sh
+sudo netbird up --management-url "<netbird_management_url>" --setup-key "<tenant_setup_key>"
 ```
 
-Inside the VM, download the installer from the NetLock web console at `http://localhost:8080`. Set server fields to `192.168.5.2:7080` and relay to `192.168.5.2:7082`. The agent will appear in the console under the selected tenant.
+NetLock install command must come from NetLock web console for correct tenant/server values.
 
-`192.168.5.2` is Lima's fixed host gateway - always resolves to the Mac from inside any Lima VM.
+## Demo Checklist
 
----
+- Dashboard loads after login.
+- Stream state shows connected.
+- Debian or customer test device appears online without page refresh.
+- Devices page shows NetBird IP when peer linked.
+- Recent Devices shows same NetBird IP state as Devices page.
+- Network page shows peers/setup keys for selected tenant.
+- Setup key list never shows raw key after creation.
+- System health explains degraded NetLock/NetBird parts.
+- No secrets appear in UI or logs.
 
-## Troubleshooting
+## Security Notes
 
-**`docker compose` not found**
+- Never commit `.env`.
+- Rotate demo NetBird token/setup keys before real external use.
+- Change bootstrap password immediately.
+- Keep `CONTROLIT_AUTO_MIGRATE=false` for demo/production runtime.
+- Run migrations only through `scripts/run-controlit-migrations.sh`.
+- Runtime API must use `CONTROLIT_DB_USER`, not MySQL root.
+- ControlIT must not edit NetLock source.
+- ControlIT writes only `controlit_*` tables.
+
+## Useful Commands
+
 ```bash
-mkdir -p ~/.docker/cli-plugins
-ln -sfn /opt/homebrew/opt/docker-compose/bin/docker-compose ~/.docker/cli-plugins/docker-compose
+docker compose ps
+docker compose -f docker-compose.controlit.yml ps
+docker logs controlit-api --tail=100
+docker logs controlit-web --tail=100
 ```
 
-**Cannot connect to Docker daemon** - Colima is not running:
+Restart ControlIT:
+
 ```bash
-colima start --arch aarch64 --vm-type vz --vz-rosetta --cpu 4 --memory 6
+docker compose -f docker-compose.controlit.yml up -d --build
 ```
 
-**Web console error on first load** - MySQL is still initialising. Wait 60 seconds and refresh.
+Stop all local services:
 
-**Port conflict on 8080 or 7080**
 ```bash
-lsof -i :8080
+docker compose -f docker-compose.controlit.yml down
+docker compose down
 ```
 
-**Slow NetLock containers** - Expected under Rosetta 2 emulation. Deploy on a Linux x86-64 host for production.
+## Full Release Notes
+
+See [RELEASE.md](RELEASE.md) for detailed rotation notes, NetBird API examples, and environment variable reference.
