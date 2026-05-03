@@ -8,10 +8,10 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: "http://+:5290"
-      # Connects to the NetLock MySQL container via its static IP on the shared network.
+      # Connects to an already-running NetLock MySQL instance.
       # Uses a dedicated least-privilege user instead of root.
       # See scripts/init-controlit-db-user.sql to create the user.
-      CONTROLIT_DB_CONNECTION: "Server=172.18.0.3;Port=3306;Database=${MYSQL_DATABASE};User=${CONTROLIT_DB_USER:-controlit_api};Password=${CONTROLIT_DB_PASSWORD};"
+      CONTROLIT_DB_CONNECTION: "Server=${CONTROLIT_DB_HOST:-mysql-container};Port=${CONTROLIT_DB_PORT:-3306};Database=${MYSQL_DATABASE};User=${CONTROLIT_DB_USER:-controlit_api};Password=${CONTROLIT_DB_PASSWORD};"
       Database__Name: "${MYSQL_DATABASE}"
       CONTROLIT_JWT_SIGNING_KEY: "${CONTROLIT_JWT_SIGNING_KEY}"
       CONTROLIT_BOOTSTRAP_EMAIL: "${CONTROLIT_BOOTSTRAP_EMAIL}"
@@ -20,15 +20,14 @@ services:
       CONTROLIT_NETLOCK_FILES_KEY: "${CONTROLIT_NETLOCK_FILES_KEY}"
       # Production/demo runtime uses least-privilege DB user; run migrations once with root/migration user first.
       CONTROLIT_AUTO_MIGRATE: "${CONTROLIT_AUTO_MIGRATE:-false}"
-      NetLock__HubUrl: "http://netlock-rmm-server:7080/commandHub"
+      NetLock__HubUrl: "${CONTROLIT_NETLOCK_HUB_URL:-http://netlock-rmm-server:7080/commandHub}"
       Netbird__BaseUrl: "${NETBIRD_BASE_URL:-https://your-netbird-management-server}"
       Netbird__Token: "${NETBIRD_TOKEN:-REPLACE_WITH_NETBIRD_PAT}"
       Cors__AllowedOrigins: "http://localhost:3000"
     ports:
       - "5290:5290"
     networks:
-      netlock-network:
-        ipv4_address: 172.18.0.10
+      - netlock-network
     restart: unless-stopped
 
   controlit-web:
@@ -54,5 +53,5 @@ services:
 networks:
   # Reference the network NetLock already created — do not recreate it.
   netlock-network:
-    name: netlock-rmm-api-layer_netlock-network
+    name: ${NETLOCK_DOCKER_NETWORK:-netlock-rmm-api-layer_netlock-network}
     external: true

@@ -4,28 +4,39 @@ Production-demo target: NetLock remains vendor-owned. ControlIT reads NetLock ta
 
 ## Fresh Install
 
-1. Generate local environment:
+Prerequisite: NetLock RMM and its MySQL database must already be installed, configured, and running. ControlIT setup does not install, configure, or start NetLock.
+
+1. Generate local ControlIT environment:
 
 ```bash
 ./scripts/setup-controlit-env.sh
 ```
 
-The script creates `.env`, generates `MYSQL_ROOT_PASSWORD`, `CONTROLIT_BOOTSTRAP_PASSWORD`, `CONTROLIT_JWT_SIGNING_KEY`, and `CONTROLIT_DB_PASSWORD`, then prints the bootstrap SuperAdmin email/password once.
+The script creates `.env`, generates `CONTROLIT_BOOTSTRAP_PASSWORD`, `CONTROLIT_JWT_SIGNING_KEY`, and `CONTROLIT_DB_PASSWORD`, then prints the bootstrap SuperAdmin email/password once. It does not generate or change NetLock credentials.
 
 2. Fill remaining `.env` values:
 
 ```bash
+MYSQL_ROOT_PASSWORD=<existing NetLock MySQL root password or migration user password>
+MYSQL_DATABASE=iphbmh
+MYSQL_CONTAINER=mysql-container
+CONTROLIT_DB_HOST=mysql-container
+CONTROLIT_DB_PORT=3306
+NETLOCK_DOCKER_NETWORK=netlock-rmm-api-layer_netlock-network
 CONTROLIT_NETLOCK_TOKEN=<remote_session_token from NetLock accounts table>
 CONTROLIT_NETLOCK_FILES_KEY=<NetLock files_api_key>
+CONTROLIT_NETLOCK_HUB_URL=http://netlock-rmm-server:7080/commandHub
 NETBIRD_BASE_URL=<NetBird management URL>
 NETBIRD_TOKEN=<NetBird personal access token>
 ```
 
-3. Start NetLock/MySQL first:
+3. Confirm existing NetLock/MySQL is healthy:
 
 ```bash
-docker compose up -d
+docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 ```
+
+For external NetLock, verify equivalent MySQL and command hub reachability from the ControlIT host/network.
 
 4. Run ControlIT EF migrations once with privileged MySQL credentials:
 
@@ -124,8 +135,12 @@ netbird up --management-url "<netbird_management_url>" --setup-key "<netbird_set
 
 | Variable | Purpose |
 |---|---|
-| `MYSQL_ROOT_PASSWORD` | MySQL root password used only for local NetLock stack and migration/user setup. |
+| `MYSQL_ROOT_PASSWORD` | Existing NetLock MySQL root password or migration user password. ControlIT setup does not create it. |
 | `MYSQL_DATABASE` | NetLock database, default `iphbmh`. |
+| `MYSQL_CONTAINER` | Existing NetLock MySQL container name for local Docker user setup, default `mysql-container`. |
+| `CONTROLIT_DB_HOST` | Existing NetLock MySQL host reachable from ControlIT containers. |
+| `CONTROLIT_DB_PORT` | Existing NetLock MySQL port, default `3306`. |
+| `NETLOCK_DOCKER_NETWORK` | Existing Docker network shared with NetLock, default `netlock-rmm-api-layer_netlock-network`. |
 | `CONTROLIT_DB_USER` | Runtime DB user, default `controlit_api`. |
 | `CONTROLIT_DB_PASSWORD` | Runtime DB user password. |
 | `CONTROLIT_JWT_SIGNING_KEY` | HS256 signing key, at least 32 bytes. |
@@ -133,6 +148,7 @@ netbird up --management-url "<netbird_management_url>" --setup-key "<netbird_set
 | `CONTROLIT_BOOTSTRAP_PASSWORD` | Initial SuperAdmin password. |
 | `CONTROLIT_NETLOCK_TOKEN` | NetLock `remote_session_token` for SignalR. |
 | `CONTROLIT_NETLOCK_FILES_KEY` | NetLock `files_api_key` for admin REST status. |
+| `CONTROLIT_NETLOCK_HUB_URL` | Existing NetLock SignalR command hub URL. |
 | `NETBIRD_BASE_URL` | NetBird management URL. |
 | `NETBIRD_TOKEN` | NetBird PAT. |
 | `CONTROLIT_AUTO_MIGRATE` | Keep `false` in production/demo runtime. |
