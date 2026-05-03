@@ -23,7 +23,7 @@ services:
       NetLock__HubUrl: "${CONTROLIT_NETLOCK_HUB_URL:-http://netlock-rmm-server:7080/commandHub}"
       Netbird__BaseUrl: "${NETBIRD_BASE_URL:-https://your-netbird-management-server}"
       Netbird__Token: "${NETBIRD_TOKEN:-REPLACE_WITH_NETBIRD_PAT}"
-      Cors__AllowedOrigins: "http://localhost:3000"
+      Cors__AllowedOrigins: "${CONTROLIT_ALLOWED_ORIGINS:-http://localhost:3000}"
     ports:
       - "5290:5290"
     networks:
@@ -36,7 +36,7 @@ services:
       dockerfile: Dockerfile.web
       args:
         # Browser-side URL — must be reachable from the end-user's machine.
-        NEXT_PUBLIC_API_URL: "http://localhost:5290"
+        NEXT_PUBLIC_API_URL: "${CONTROLIT_PUBLIC_API_URL:-http://localhost:5290}"
     image: controlit-web:latest
     container_name: controlit-web
     environment:

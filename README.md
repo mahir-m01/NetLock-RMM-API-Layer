@@ -27,6 +27,8 @@ This `production` branch is for alpha testers and deployment validation only. Ar
 
 ControlIT setup does not install, configure, or start NetLock. Install and verify NetLock first, then add ControlIT on top.
 
+Alpha networking scope: this release is tested for self-hosted NetLock on the same host, Docker network, or local LAN. Public-domain deployments can work only when DNS/TLS/reverse proxy, `CONTROLIT_PUBLIC_API_URL`, `CONTROLIT_ALLOWED_ORIGINS`, `CONTROLIT_DB_HOST`, and `CONTROLIT_NETLOCK_HUB_URL` are set correctly. Full hosted-domain hardening is not the current alpha target.
+
 macOS local demo:
 
 ```bash
@@ -63,11 +65,27 @@ NETLOCK_DOCKER_NETWORK=netlock-rmm-api-layer_netlock-network
 CONTROLIT_NETLOCK_TOKEN=<remote_session_token from NetLock accounts table>
 CONTROLIT_NETLOCK_FILES_KEY=<NetLock files_api_key>
 CONTROLIT_NETLOCK_HUB_URL=http://netlock-rmm-server:7080/commandHub
+CONTROLIT_PUBLIC_API_URL=http://localhost:5290
+CONTROLIT_ALLOWED_ORIGINS=http://localhost:3000
 NETBIRD_BASE_URL=https://api.netbird.io
 NETBIRD_TOKEN=<NetBird personal access token>
 ```
 
 Adjust host, container, and network values if NetLock runs outside this repo's local Docker stack. For self-hosted NetBird, replace `NETBIRD_BASE_URL` with your management API URL.
+
+For a LAN demo, use machine IPs:
+
+```bash
+CONTROLIT_PUBLIC_API_URL=http://<controlit-host-lan-ip>:5290
+CONTROLIT_ALLOWED_ORIGINS=http://<controlit-host-lan-ip>:3000
+```
+
+For a domain demo behind HTTPS:
+
+```bash
+CONTROLIT_PUBLIC_API_URL=https://api.<your-domain>
+CONTROLIT_ALLOWED_ORIGINS=https://app.<your-domain>
+```
 
 4. Confirm NetLock is already healthy:
 

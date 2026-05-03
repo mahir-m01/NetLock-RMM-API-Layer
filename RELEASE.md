@@ -6,6 +6,8 @@ Production-demo target: NetLock remains vendor-owned. ControlIT reads NetLock ta
 
 Prerequisite: NetLock RMM and its MySQL database must already be installed, configured, and running. ControlIT setup does not install, configure, or start NetLock.
 
+Alpha networking scope: this release is tested for self-hosted NetLock on the same host, Docker network, or local LAN. Public-domain deployments require a correctly configured reverse proxy/TLS layer plus matching ControlIT API URL and CORS origins. That hosted-domain path is not the current alpha target.
+
 1. Generate local ControlIT environment:
 
 ```bash
@@ -26,8 +28,24 @@ NETLOCK_DOCKER_NETWORK=netlock-rmm-api-layer_netlock-network
 CONTROLIT_NETLOCK_TOKEN=<remote_session_token from NetLock accounts table>
 CONTROLIT_NETLOCK_FILES_KEY=<NetLock files_api_key>
 CONTROLIT_NETLOCK_HUB_URL=http://netlock-rmm-server:7080/commandHub
+CONTROLIT_PUBLIC_API_URL=http://localhost:5290
+CONTROLIT_ALLOWED_ORIGINS=http://localhost:3000
 NETBIRD_BASE_URL=<NetBird management URL>
 NETBIRD_TOKEN=<NetBird personal access token>
+```
+
+LAN demo example:
+
+```bash
+CONTROLIT_PUBLIC_API_URL=http://<controlit-host-lan-ip>:5290
+CONTROLIT_ALLOWED_ORIGINS=http://<controlit-host-lan-ip>:3000
+```
+
+Domain demo example:
+
+```bash
+CONTROLIT_PUBLIC_API_URL=https://api.<your-domain>
+CONTROLIT_ALLOWED_ORIGINS=https://app.<your-domain>
 ```
 
 3. Confirm existing NetLock/MySQL is healthy:
@@ -149,6 +167,8 @@ netbird up --management-url "<netbird_management_url>" --setup-key "<netbird_set
 | `CONTROLIT_NETLOCK_TOKEN` | NetLock `remote_session_token` for SignalR. |
 | `CONTROLIT_NETLOCK_FILES_KEY` | NetLock `files_api_key` for admin REST status. |
 | `CONTROLIT_NETLOCK_HUB_URL` | Existing NetLock SignalR command hub URL. |
+| `CONTROLIT_PUBLIC_API_URL` | Browser-facing ControlIT API URL baked into the Next.js dashboard build. |
+| `CONTROLIT_ALLOWED_ORIGINS` | Comma-separated browser origins allowed by ControlIT API CORS. |
 | `NETBIRD_BASE_URL` | NetBird management URL. |
 | `NETBIRD_TOKEN` | NetBird PAT. |
 | `CONTROLIT_AUTO_MIGRATE` | Keep `false` in production/demo runtime. |
