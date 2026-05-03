@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "test": "jest",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit --skipLibCheck"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.99.0",
@@ -25,13 +27,19 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
+    "@types/jest": "^30.0.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "eslint": "^9.39.4",
+    "eslint-config-next": "^16.2.4",
     "jest": "^30.3.0",
     "jest-environment-jsdom": "^30.3.0",
     "tailwindcss": "^4",
     "ts-jest": "^29.4.9",
     "typescript": "^5"
+  },
+  "overrides": {
+    "postcss": ">=8.5.10"
   }
 }

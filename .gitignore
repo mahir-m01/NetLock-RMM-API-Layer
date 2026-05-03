@@ -29,3 +29,10 @@ obj/
 *.suo
 .vs/
 .firecrawl/
+.claude/
+.codex/
+.playwright-mcp/
+AGENTS.md
+CLAUDE.md
+dashboard-auth-snapshot.md
+graphify-out/

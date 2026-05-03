@@ -27,6 +27,9 @@ public static class DeviceEndpoints
             ControlItFacade facade,
             TenantContext tenant) =>
         {
+            filter.PageSize = Math.Clamp(filter.PageSize, 1, 100);
+            filter.Page = Math.Max(1, filter.Page);
+
             var result = await facade.GetDevicesAsync(filter, tenant);
             return Results.Ok(result);
         }).RequireRateLimiting("api").RequireAuthorization("TenantMember");

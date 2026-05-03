@@ -14,12 +14,33 @@
 set -euo pipefail
 
 CONTAINER="mysql-container"
-DB="iphbmh"
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ENV_FILE="${CONTROLIT_ENV_FILE:-$ROOT_DIR/.env}"
+DB="${MYSQL_DATABASE:-}"
+MYSQL_ROOT_PASSWORD="${MYSQL_ROOT_PASSWORD:-}"
 PROJECT="$(cd "$(dirname "$0")/.." && pwd)/src/ControlIT.Api/ControlIT.Api.csproj"
+
+read_env() {
+  local key="$1"
+  awk -F= -v key="$key" '$1 == key { sub(/^[^=]*=/, ""); print; exit }' "$ENV_FILE"
+}
+
+if [[ -z "$DB" && -f "$ENV_FILE" ]]; then
+  DB="$(read_env MYSQL_DATABASE)"
+fi
+
+if [[ -z "$MYSQL_ROOT_PASSWORD" && -f "$ENV_FILE" ]]; then
+  MYSQL_ROOT_PASSWORD="$(read_env MYSQL_ROOT_PASSWORD)"
+fi
+
+if [[ -z "$DB" || -z "$MYSQL_ROOT_PASSWORD" ]]; then
+  echo "ERROR: MYSQL_DATABASE and MYSQL_ROOT_PASSWORD are required in .env or environment." >&2
+  exit 1
+fi
 
 # ── Fetch token from running container ───────────────────────────────────────
 TOKEN=$(docker exec "$CONTAINER" \
-  mysql -u root -pEuMmvIqcJjafr6fb "$DB" \
+  mysql -u root -p"$MYSQL_ROOT_PASSWORD" "$DB" \
   --skip-column-names --silent \
   -e "SELECT remote_session_token FROM accounts LIMIT 1;" \
   2>/dev/null | tr -d '\r\n')

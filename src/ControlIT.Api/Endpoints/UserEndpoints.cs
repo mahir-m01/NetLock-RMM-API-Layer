@@ -1,4 +1,6 @@
+using System.Security.Cryptography;
 using System.Text.Json;
+using ControlIT.Api.Application;
 using ControlIT.Api.Domain.DTOs.Requests;
 using ControlIT.Api.Domain.Interfaces;
 using ControlIT.Api.Domain.Models;
@@ -24,6 +26,12 @@ public static class UserEndpoints
             IAuditService audit,
             IActorContext actor) =>
         {
+            if (!RoleCeiling.CanManage(actor.Role, request.Role))
+                return Results.Problem(
+                    detail: "Insufficient privilege to assign the requested role.",
+                    statusCode: 403,
+                    title: "Forbidden");
+
             var password = GeneratePassword();
             var user = new ControlItUser
             {
@@ -83,6 +91,18 @@ public static class UserEndpoints
             var user = await users.GetByIdAsync(id);
             if (user is null) return Results.NotFound();
 
+            if (!RoleCeiling.CanManage(actor.Role, user.Role))
+                return Results.Problem(
+                    detail: "Insufficient privilege to modify this user.",
+                    statusCode: 403,
+                    title: "Forbidden");
+
+            if (request.Role.HasValue && !RoleCeiling.CanManage(actor.Role, request.Role.Value))
+                return Results.Problem(
+                    detail: "Insufficient privilege to assign the requested role.",
+                    statusCode: 403,
+                    title: "Forbidden");
+
             if (request.Role.HasValue) user.Role = request.Role.Value;
             if (request.TenantId.HasValue) user.TenantId = request.TenantId;
             if (request.AssignedClients is not null)
@@ -119,6 +139,12 @@ public static class UserEndpoints
             if (actor.UserId == id)
                 return Results.Problem(detail: "Cannot deactivate your own account.", statusCode: 400);
 
+            if (!RoleCeiling.CanManage(actor.Role, user.Role))
+                return Results.Problem(
+                    detail: "Insufficient privilege to deactivate this user.",
+                    statusCode: 403,
+                    title: "Forbidden");
+
             user.IsActive = false;
             await users.UpdateAsync(user);
 
@@ -146,6 +172,12 @@ public static class UserEndpoints
         {
             var user = await users.GetByIdAsync(id);
             if (user is null) return Results.NotFound();
+
+            if (!RoleCeiling.CanManage(actor.Role, user.Role))
+                return Results.Problem(
+                    detail: "Insufficient privilege to force-reset this user's password.",
+                    statusCode: 403,
+                    title: "Forbidden");
 
             user.MustChangePassword = true;
             await users.UpdateAsync(user);
@@ -180,25 +212,27 @@ public static class UserEndpoints
 
     private static string GeneratePassword()
     {
-        // Generates a 16-char password that satisfies the policy (upper + lower + digit + symbol).
         const string upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
         const string lower = "abcdefghjkmnpqrstuvwxyz";
         const string digits = "23456789";
         const string symbols = "!@#$%^&*";
+        const string all = upper + lower + digits + symbols;
 
-        var rand = new Random();
-        var chars = new List<char>
-        {
-            upper[rand.Next(upper.Length)],
-            lower[rand.Next(lower.Length)],
-            digits[rand.Next(digits.Length)],
-            symbols[rand.Next(symbols.Length)]
-        };
+        var chars = new char[16];
+        chars[0] = upper[RandomNumberGenerator.GetInt32(upper.Length)];
+        chars[1] = lower[RandomNumberGenerator.GetInt32(lower.Length)];
+        chars[2] = digits[RandomNumberGenerator.GetInt32(digits.Length)];
+        chars[3] = symbols[RandomNumberGenerator.GetInt32(symbols.Length)];
 
-        var all = upper + lower + digits + symbols;
         for (int i = 4; i < 16; i++)
-            chars.Add(all[rand.Next(all.Length)]);
+            chars[i] = all[RandomNumberGenerator.GetInt32(all.Length)];
 
-        return new string(chars.OrderBy(_ => rand.Next()).ToArray());
+        for (int i = chars.Length - 1; i > 0; i--)
+        {
+            int j = RandomNumberGenerator.GetInt32(i + 1);
+            (chars[i], chars[j]) = (chars[j], chars[i]);
+        }
+
+        return new string(chars);
     }
 }

@@ -18,9 +18,12 @@ namespace ControlIT.Api.Endpoints;
 
 using System.Text.Json;
 using ControlIT.Api.Application;
+using ControlIT.Api.Domain.DTOs.Responses;
 
 public static class DashboardEndpoints
 {
+    private static readonly JsonSerializerOptions SseJson = new(JsonSerializerDefaults.Web);
+
     public static void Map(WebApplication app)
     {
         // GET /dashboard
@@ -33,51 +36,48 @@ public static class DashboardEndpoints
             return Results.Ok(summary);
         }).RequireRateLimiting("api").RequireAuthorization("TenantMember");
 
-        // GET /sync/stream
-        // Server-Sent Events endpoint. Keeps the HTTP connection open and pushes
-        // a sync event every 30 seconds. The frontend uses fetch() + ReadableStream
-        // (not EventSource) so that it can send the x-api-key header.
-        //
-        // Event format:
-        //   data: {"syncedAt":"...","onlineDevices":3,"totalDevices":5}\n\n
-        //
-        // The CancellationToken fires when the client disconnects (browser tab
-        // closed, navigation, explicit abort). The while-loop exits cleanly.
-        app.MapGet("/sync/stream", async (
+        MapDashboardStream(app, "/dashboard/stream");
+        MapDashboardStream(app, "/sync/stream");
+    }
+
+    private static void MapDashboardStream(WebApplication app, string path)
+    {
+        app.MapGet(path, async (
             ControlItFacade facade,
+            IPushEventPublisher events,
             TenantContext tenant,
             HttpContext ctx,
             CancellationToken ct) =>
         {
-            ctx.Response.ContentType  = "text/event-stream";
-            ctx.Response.Headers["Cache-Control"]    = "no-cache";
+            ctx.Response.ContentType = "text/event-stream";
+            ctx.Response.Headers["Cache-Control"] = "no-cache";
             ctx.Response.Headers["X-Accel-Buffering"] = "no";  // disable nginx buffering
 
             try
             {
-                while (!ct.IsCancellationRequested)
-                {
-                    var summary = await facade.GetDashboardSummaryAsync(tenant, ct);
+                var scope = PushSubscriptionScope.From(tenant);
+                var snapshot = await facade.GetDashboardPushSnapshotAsync(tenant, ct);
+                foreach (var evt in snapshot)
+                    await WriteSseAsync(ctx, evt, ct);
 
-                    var payload = JsonSerializer.Serialize(new
-                    {
-                        syncedAt      = summary.ServerTime,
-                        onlineDevices = summary.OnlineDevices,
-                        totalDevices  = summary.TotalDevices
-                    });
-
-                    // SSE wire format: "data: <json>\n\n"
-                    await ctx.Response.WriteAsync($"data: {payload}\n\n", ct);
-                    await ctx.Response.Body.FlushAsync(ct);
-
-                    // Wait 30 s before next push. Cancelled immediately on disconnect.
-                    await Task.Delay(TimeSpan.FromSeconds(30), ct);
-                }
+                await foreach (var evt in events.SubscribeAsync(scope, ct))
+                    await WriteSseAsync(ctx, evt, ct);
             }
             catch (OperationCanceledException)
             {
                 // Client disconnected — normal exit, no error to propagate.
             }
         }).RequireRateLimiting("api").RequireAuthorization("TenantMember");
+    }
+
+    private static async Task WriteSseAsync(
+        HttpContext ctx,
+        PushEventEnvelope evt,
+        CancellationToken ct)
+    {
+        var payload = JsonSerializer.Serialize(evt, SseJson);
+        await ctx.Response.WriteAsync($"event: {evt.Type}\n", ct);
+        await ctx.Response.WriteAsync($"data: {payload}\n\n", ct);
+        await ctx.Response.Body.FlushAsync(ct);
     }
 }

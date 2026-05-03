@@ -74,31 +74,8 @@ public static class CommandEndpoints
 
                 return Results.Ok(result);
             }
-            catch (TimeoutException ex)
+            catch (KeyNotFoundException ex)
             {
-                // Device didn't respond in time — write TIMEOUT audit entry.
-                await audit.RecordAsync(new AuditEntry
-                {
-                    TenantId = tenant.TenantId ?? 0,
-                    ActorKeyId = actor.UserId.ToString(),
-                    ActorEmail = actor.Email,
-                    Action = "COMMAND_EXECUTE",
-                    ResourceType = "Device",
-                    ResourceId = req.DeviceId.ToString(),
-                    IpAddress = actor.IpAddress,
-                    Result = "TIMEOUT",
-                    ErrorMessage = ex.Message
-                });
-
-                // 504 Gateway Timeout — the device (downstream) didn't respond in time.
-                return Results.Problem(
-                    detail: ex.Message,
-                    statusCode: 504,
-                    title: "Command Timeout");
-            }
-            catch (InvalidOperationException ex)
-            {
-                // Hub not connected, device not found, or duplicate command in flight.
                 await audit.RecordAsync(new AuditEntry
                 {
                     TenantId = tenant.TenantId ?? 0,
@@ -112,11 +89,55 @@ public static class CommandEndpoints
                     ErrorMessage = ex.Message
                 });
 
-                // 503 Service Unavailable — the hub/device is not available.
                 return Results.Problem(
-                    detail: ex.Message,
-                    statusCode: 503,
-                    title: "Service Unavailable");
+                    detail: "Device not found or not accessible.",
+                    statusCode: 404,
+                    title: "Not Found");
+            }
+            catch (TimeoutException ex)
+            {
+                await audit.RecordAsync(new AuditEntry
+                {
+                    TenantId = tenant.TenantId ?? 0,
+                    ActorKeyId = actor.UserId.ToString(),
+                    ActorEmail = actor.Email,
+                    Action = "COMMAND_EXECUTE",
+                    ResourceType = "Device",
+                    ResourceId = req.DeviceId.ToString(),
+                    IpAddress = actor.IpAddress,
+                    Result = "TIMEOUT",
+                    ErrorMessage = ex.Message
+                });
+
+                return Results.Problem(
+                    detail: "Device did not respond within the allowed time.",
+                    statusCode: 504,
+                    title: "Command Timeout");
+            }
+            catch (InvalidOperationException ex)
+            {
+                var isConflict = ex.Message.Contains("already pending", StringComparison.OrdinalIgnoreCase);
+                var statusCode = isConflict ? 409 : 503;
+
+                await audit.RecordAsync(new AuditEntry
+                {
+                    TenantId = tenant.TenantId ?? 0,
+                    ActorKeyId = actor.UserId.ToString(),
+                    ActorEmail = actor.Email,
+                    Action = "COMMAND_EXECUTE",
+                    ResourceType = "Device",
+                    ResourceId = req.DeviceId.ToString(),
+                    IpAddress = actor.IpAddress,
+                    Result = "FAILURE",
+                    ErrorMessage = ex.Message
+                });
+
+                return Results.Problem(
+                    detail: isConflict
+                        ? "A command is already pending for this device."
+                        : "Command service temporarily unavailable.",
+                    statusCode: statusCode,
+                    title: isConflict ? "Conflict" : "Service Unavailable");
             }
         }).RequireRateLimiting("commands").RequireAuthorization("CanExecuteCommands");
     }

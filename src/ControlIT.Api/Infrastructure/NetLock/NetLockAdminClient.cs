@@ -16,6 +16,8 @@ namespace ControlIT.Api.Infrastructure.NetLock;
 using System.Text.Json;
 using ControlIT.Api.Common.Configuration;
 using ControlIT.Api.Domain.Interfaces;
+using ControlIT.Api.Domain.Models;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 
 public class NetLockAdminClient : INetLockAdminClient
@@ -23,14 +25,17 @@ public class NetLockAdminClient : INetLockAdminClient
     private readonly HttpClient _http;
     private readonly string _baseUrl;
     private readonly ILogger<NetLockAdminClient> _logger;
+    private readonly IMemoryCache _cache;
 
     public NetLockAdminClient(
         IHttpClientFactory httpFactory,
         IOptions<NetLockOptions> opts,
-        ILogger<NetLockAdminClient> logger)
+        ILogger<NetLockAdminClient> logger,
+        IMemoryCache cache)
     {
-        _http   = httpFactory.CreateClient("netlockadmin");
+        _http = httpFactory.CreateClient("netlockadmin");
         _logger = logger;
+        _cache = cache;
 
         // Derive base URL from HubUrl by stripping the path.
         // "http://host:7080/commandHub" → "http://host:7080"
@@ -44,6 +49,20 @@ public class NetLockAdminClient : INetLockAdminClient
     }
 
     public async Task<IReadOnlySet<string>> GetConnectedAccessKeysAsync(
+        CancellationToken ct = default)
+    {
+        return await _cache.GetOrCreateAsync("netlock:connected_keys", async entry =>
+        {
+            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(5);
+            var snapshot = await GetConnectedDevicesSnapshotAsync(ct);
+            if (snapshot.IsDegraded)
+                entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(1);
+
+            return snapshot.ConnectedAccessKeys;
+        }) ?? (IReadOnlySet<string>)new HashSet<string>();
+    }
+
+    public async Task<NetLockConnectedDevicesSnapshot> GetConnectedDevicesSnapshotAsync(
         CancellationToken ct = default)
     {
         try
@@ -60,20 +79,28 @@ public class NetLockAdminClient : INetLockAdminClient
             {
                 foreach (var el in arr.EnumerateArray())
                 {
-                    var k = el.GetString();
-                    if (!string.IsNullOrEmpty(k)) keys.Add(k);
+                    var key = el.GetString();
+                    if (!string.IsNullOrEmpty(key)) keys.Add(key);
                 }
             }
 
-            return keys;
+            return new NetLockConnectedDevicesSnapshot(
+                keys,
+                IsDegraded: false,
+                DegradedReason: null,
+                DateTimeOffset.UtcNow);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex,
-                "NetLockAdminClient: failed to fetch connected devices from {BaseUrl}. Treating all devices as offline.",
+                "NetLockAdminClient: failed to fetch connected devices from {BaseUrl}. Treating live bridge as degraded.",
                 _baseUrl);
-            // Return empty set — facade will mark all devices offline rather than crash.
-            return new HashSet<string>();
+
+            return new NetLockConnectedDevicesSnapshot(
+                new HashSet<string>(StringComparer.Ordinal),
+                IsDegraded: true,
+                DegradedReason: "netlock_connected_endpoint_unavailable",
+                DateTimeOffset.UtcNow);
         }
     }
 }

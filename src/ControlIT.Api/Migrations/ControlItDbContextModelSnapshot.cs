@@ -163,6 +163,60 @@ namespace ControlIT.Api.Migrations
                     b.ToTable("controlit_users", (string)null);
                 });
 
+            modelBuilder.Entity("ControlIT.Api.Domain.Models.DeviceNetbirdMap", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("DeviceId")
+                        .HasColumnType("int")
+                        .HasColumnName("device_id");
+
+                    b.Property<DateTime>("MappedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("mapped_at");
+
+                    b.Property<string>("MappedBy")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)")
+                        .HasColumnName("mapped_by");
+
+                    b.Property<string>("NetbirdHostname")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)")
+                        .HasColumnName("netbird_hostname");
+
+                    b.Property<string>("NetbirdIp")
+                        .IsRequired()
+                        .HasMaxLength(45)
+                        .HasColumnType("varchar(45)")
+                        .HasColumnName("netbird_ip");
+
+                    b.Property<string>("NetbirdPeerId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)")
+                        .HasColumnName("netbird_peer_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DeviceId")
+                        .IsUnique()
+                        .HasDatabaseName("idx_device_netbird_device");
+
+                    b.HasIndex("NetbirdPeerId")
+                        .IsUnique()
+                        .HasDatabaseName("idx_device_netbird_peer");
+
+                    b.ToTable("controlit_device_netbird_map", (string)null);
+                });
+
             modelBuilder.Entity("ControlIT.Api.Domain.Models.PasswordResetToken", b =>
                 {
                     b.Property<int>("Id")
@@ -259,6 +313,68 @@ namespace ControlIT.Api.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("controlit_refresh_tokens", (string)null);
+                });
+
+            modelBuilder.Entity("ControlIT.Api.Domain.Models.TenantNetbirdGroup", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("ControlItManaged")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("controlit_managed");
+
+                    b.Property<string>("GroupMode")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)")
+                        .HasColumnName("group_mode");
+
+                    b.Property<string>("IsolationPolicyId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)")
+                        .HasColumnName("isolation_policy_id");
+
+                    b.Property<string>("NetbirdGroupId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)")
+                        .HasColumnName("netbird_group_id");
+
+                    b.Property<string>("NetbirdGroupName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)")
+                        .HasColumnName("netbird_group_name");
+
+                    b.Property<int>("TenantId")
+                        .HasColumnType("int")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NetbirdGroupId")
+                        .IsUnique()
+                        .HasDatabaseName("idx_tenant_netbird_group_group");
+
+                    b.HasIndex("TenantId")
+                        .IsUnique()
+                        .HasDatabaseName("idx_tenant_netbird_group_tenant");
+
+                    b.ToTable("controlit_tenant_netbird_group", (string)null);
                 });
 
             modelBuilder.Entity("ControlIT.Api.Domain.Models.PasswordResetToken", b =>

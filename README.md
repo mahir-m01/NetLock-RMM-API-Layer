@@ -4,6 +4,8 @@ ControlIT is a typed REST API layer built on top of NetLock RMM, designed for ma
 
 This repo contains the ASP.NET Core API, the local Docker stack for running NetLock RMM on Apple Silicon, and a Debian Lima VM for agent testing.
 
+For production-demo setup, generated credentials, one-time migrations, NetBird modes, and rotation steps, see [RELEASE.md](RELEASE.md).
+
 ---
 
 ## Architecture
@@ -54,7 +56,7 @@ graph TD
 - Maintains a full audit log for every command attempt (DPDP Act 2023)
 - Provides a dashboard summary with live online device counts
 
-Phase 1 covers NetLock RMM only. Netbird and Wazuh are Phase 2.
+Current alpha covers NetLock RMM plus NetBird network visibility/enrollment paths. Wazuh remains Phase 2.
 
 ---
 
@@ -159,10 +161,19 @@ colima start --arch aarch64 --vm-type vz --vz-rosetta --cpu 4 --memory 6
 ### Start the stack
 
 ```bash
+./scripts/setup-controlit-env.sh
 docker compose up -d
 ```
 
 Allow 2-3 minutes on first boot. MySQL runs a healthcheck before NetLock containers start.
+
+ControlIT production/demo runtime uses a least-privilege database user. Run EF migrations once with privileged credentials, then create/use the runtime user:
+
+```bash
+./scripts/run-controlit-migrations.sh
+./scripts/apply-controlit-db-user.sh
+docker compose -f docker-compose.controlit.yml up -d --build
+```
 
 ### Run the API
 

@@ -39,4 +39,8 @@ public class DeviceResponse
     public bool IsOnline { get; set; }
 
     public DateTime LastAccess { get; set; }
+
+    public string? NetbirdIp { get; set; }
+    public string? NetbirdPeerId { get; set; }
+    public string? NetbirdHostname { get; set; }
 }

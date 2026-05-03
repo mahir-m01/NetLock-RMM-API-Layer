@@ -1,9 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { getDashboard, getDevices } from "@/lib/api";
+import { getDevices, getNetworkSummary, getTenants } from "@/lib/api";
 import type { Device } from "@/lib/types";
+import { useDashboardStream, type StreamStatus } from "./use-dashboard-stream";
+import { mergeDeviceNetbirdFields, NetbirdStatus } from "@/components/network/netbird-status";
 import {
   Monitor,
   Wifi,
@@ -13,8 +16,6 @@ import {
   AlertTriangle,
   Terminal,
   ClipboardList,
-  Users,
-  Shield,
   Network,
   Server,
 } from "lucide-react";
@@ -22,6 +23,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useAuth } from "@/components/providers/auth-provider";
 
 // ─── KPI stat card ────────────────────────────────────────────────────────────
@@ -93,32 +101,10 @@ function UsageBar({ value }: { value: number | null | undefined }) {
   );
 }
 
-// ─── Placeholder card ─────────────────────────────────────────────────────────
-
-interface PlaceholderCardProps {
-  icon: React.ElementType;
-  title: string;
-  description: string;
-  phase: string;
-}
-
-function PlaceholderCard({ icon: Icon, title, description, phase }: PlaceholderCardProps) {
-  return (
-    <Card className="border-border bg-card opacity-60">
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <div className="flex items-center gap-2">
-          <Icon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-          <CardTitle className="text-sm font-medium text-foreground">{title}</CardTitle>
-        </div>
-        <Badge className="bg-muted text-muted-foreground border-border text-xs">
-          {phase}
-        </Badge>
-      </CardHeader>
-      <CardContent>
-        <p className="text-xs text-muted-foreground">{description}</p>
-      </CardContent>
-    </Card>
-  );
+function getStreamBadgeClass(status: StreamStatus): string {
+  if (status === "connected") return "bg-blue-500/20 text-blue-400 border-blue-500/30";
+  if (status === "reconnecting") return "bg-amber-500/20 text-amber-400 border-amber-500/30";
+  return "bg-red-500/20 text-red-400 border-red-500/30";
 }
 
 // ─── Main page ────────────────────────────────────────────────────────────────
@@ -126,24 +112,62 @@ function PlaceholderCard({ icon: Icon, title, description, phase }: PlaceholderC
 export default function DashboardPage() {
   const { user } = useAuth();
   const isSuperAdmin = user?.role === "SuperAdmin";
+  const isElevated = user?.role === "SuperAdmin" || user?.role === "CpAdmin";
+  const [dashNetworkTenantId, setDashNetworkTenantId] = useState<number | undefined>(undefined);
+  const { liveState, streamStatus, streamError } = useDashboardStream(
+    Boolean(user),
+    dashNetworkTenantId,
+    !isElevated
+  );
+  const stats = liveState.stats;
+  const devicesData = liveState.devicesData;
+  const streamNetworkSummary =
+    !isElevated || liveState.networkSummaryTenantId === dashNetworkTenantId
+      ? liveState.networkSummary
+      : undefined;
+  const streamIsStale = streamStatus !== "connected";
+  const statsLoading = stats === undefined && streamStatus !== "offline";
+  const networkQueryEnabled = !isElevated || dashNetworkTenantId !== undefined;
+
+  const { data: networkTenants } = useQuery({
+    queryKey: ["tenants"],
+    queryFn: getTenants,
+    enabled: isElevated,
+  });
+
   const {
-    data: stats,
-    isLoading: statsLoading,
-    isError: statsError,
+    data: queriedNetworkSummary,
+    isLoading: networkQueryLoading,
+    isError: networkQueryError,
   } = useQuery({
-    queryKey: ["dashboard"],
-    queryFn: getDashboard,
+    queryKey: ["network-summary", dashNetworkTenantId ?? "tenant-scope"],
+    queryFn: () => getNetworkSummary(dashNetworkTenantId),
+    enabled: networkQueryEnabled,
     refetchInterval: 30_000,
   });
 
   const {
-    data: devicesData,
-    isLoading: devicesLoading,
+    data: queriedDevicesData,
+    isLoading: queriedDevicesLoading,
   } = useQuery({
     queryKey: ["devices-recent"],
     queryFn: () => getDevices(1, 10),
+    enabled: Boolean(user),
     refetchInterval: 30_000,
   });
+
+  const networkSummary = streamNetworkSummary ?? queriedNetworkSummary;
+  const networkLoading = networkQueryEnabled && networkSummary === undefined && networkQueryLoading;
+  const recentDevicesData = devicesData
+    ? {
+        ...devicesData,
+        items: devicesData.items.map((device) =>
+          mergeDeviceNetbirdFields(device, queriedDevicesData?.items)
+        ),
+      }
+    : queriedDevicesData;
+  const devicesLoading =
+    recentDevicesData === undefined && streamStatus !== "offline" && queriedDevicesLoading;
 
   const offlineDevices =
     stats !== undefined
@@ -152,9 +176,27 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      {statsError && (
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <Badge className={`${getStreamBadgeClass(streamStatus)} text-xs w-fit`}>
+          Push stream: {streamStatus}
+        </Badge>
+        {liveState.lastEventAt && (
+          <span className="text-xs text-muted-foreground">
+            Last event {new Date(liveState.lastEventAt).toLocaleTimeString()}
+          </span>
+        )}
+      </div>
+
+      {streamIsStale && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+          Live stream {streamStatus}. Dashboard may show stale data until push reconnects.
+          {streamError ? ` ${streamError}` : ""}
+        </div>
+      )}
+
+      {liveState.degradedReason && (
         <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
-          Failed to load dashboard data. Check your API key and connection.
+          {liveState.degradedReason}
         </div>
       )}
 
@@ -228,6 +270,7 @@ export default function DashboardPage() {
                       <th className="px-4 py-2 text-left font-medium text-muted-foreground">CPU</th>
                       <th className="px-4 py-2 text-left font-medium text-muted-foreground">RAM</th>
                       <th className="px-4 py-2 text-left font-medium text-muted-foreground">Status</th>
+                      <th className="px-4 py-2 text-left font-medium text-muted-foreground">NetBird</th>
                       <th className="px-4 py-2 text-left font-medium text-muted-foreground">Last Seen</th>
                     </tr>
                   </thead>
@@ -235,14 +278,14 @@ export default function DashboardPage() {
                     {devicesLoading
                       ? Array.from({ length: 5 }).map((_, i) => (
                           <tr key={i} className="border-b border-border">
-                            {Array.from({ length: 7 }).map((_, j) => (
+                            {Array.from({ length: 8 }).map((_, j) => (
                               <td key={j} className="px-4 py-2">
                                 <Skeleton className="h-3 w-full bg-muted" />
                               </td>
                             ))}
                           </tr>
                         ))
-                      : devicesData?.items.map((device: Device) => (
+                      : recentDevicesData?.items.map((device: Device) => (
                           <tr
                             key={device.id}
                             className="border-b border-border last:border-0 hover:bg-muted/50"
@@ -272,6 +315,9 @@ export default function DashboardPage() {
                                 {device.isOnline ? "Online" : "Offline"}
                               </Badge>
                             </td>
+                            <td className="px-4 py-2">
+                              <NetbirdStatus device={device} />
+                            </td>
                             <td className="px-4 py-2 text-muted-foreground">
                               {device.lastAccess
                                 ? new Date(device.lastAccess).toLocaleDateString()
@@ -279,9 +325,9 @@ export default function DashboardPage() {
                             </td>
                           </tr>
                         ))}
-                    {!devicesLoading && devicesData?.items.length === 0 && (
+                    {!devicesLoading && recentDevicesData?.items.length === 0 && (
                       <tr>
-                        <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
+                        <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">
                           No devices found.
                         </td>
                       </tr>
@@ -293,89 +339,129 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* Right: Quick Actions (1/3 width) */}
-        <Card className="border-border bg-card">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold text-foreground">
-              Quick Actions
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <Button
-              asChild
-              variant="outline"
-              className="w-full justify-start border-border text-foreground hover:bg-muted text-sm"
-            >
-              <Link href="/commands">
-                <Terminal className="mr-2 h-4 w-4" />
-                Execute Command
-              </Link>
-            </Button>
-            <Button
-              asChild
-              variant="outline"
-              className="w-full justify-start border-border text-foreground hover:bg-muted text-sm"
-            >
-              <Link href="/audit">
-                <ClipboardList className="mr-2 h-4 w-4" />
-                View Audit Log
-              </Link>
-            </Button>
-            <Button
-              asChild
-              variant="outline"
-              className="w-full justify-start border-border text-foreground hover:bg-muted text-sm"
-            >
-              <Link href="/devices">
-                <Monitor className="mr-2 h-4 w-4" />
-                View All Devices
-              </Link>
-            </Button>
-            {isSuperAdmin && (
+        {/* Right: Compact dashboard actions */}
+        <div className="space-y-4">
+          <Card className="border-border bg-card self-start">
+            <CardHeader className="py-3">
+              <CardTitle className="text-sm font-semibold text-foreground">
+                Quick Actions
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-1.5 pt-0">
               <Button
                 asChild
                 variant="outline"
-                className="w-full justify-start border-border text-foreground hover:bg-muted text-sm"
+                size="sm"
+                className="h-8 w-full justify-start border-border text-foreground hover:bg-muted text-xs"
               >
-                <Link href="/admin/system">
-                  <Server className="mr-2 h-4 w-4" />
-                  System Health
+                <Link href="/commands">
+                  <Terminal className="mr-2 h-4 w-4" />
+                  Execute Command
                 </Link>
               </Button>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="h-8 w-full justify-start border-border text-foreground hover:bg-muted text-xs"
+              >
+                <Link href="/audit">
+                  <ClipboardList className="mr-2 h-4 w-4" />
+                  View Audit Log
+                </Link>
+              </Button>
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="h-8 w-full justify-start border-border text-foreground hover:bg-muted text-xs"
+              >
+                <Link href="/devices">
+                  <Monitor className="mr-2 h-4 w-4" />
+                  View All Devices
+                </Link>
+              </Button>
+              {isSuperAdmin && (
+                <Button
+                  asChild
+                  variant="outline"
+                  size="sm"
+                  className="h-8 w-full justify-start border-border text-foreground hover:bg-muted text-xs"
+                >
+                  <Link href="/admin/system">
+                    <Server className="mr-2 h-4 w-4" />
+                    System Health
+                  </Link>
+                </Button>
+              )}
+            </CardContent>
+          </Card>
 
-      {/* Row 3 — Placeholder future panels */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card className="border-border bg-card">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <div className="flex items-center gap-2">
-              <Users className="h-4 w-4 text-blue-400" aria-hidden="true" />
-              <CardTitle className="text-sm font-medium text-foreground">User Accounts</CardTitle>
-            </div>
-            <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 text-xs">Live</Badge>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xs text-muted-foreground mb-3">JWT auth, 4-role RBAC, user management.</p>
-            <Button asChild size="sm" variant="outline" className="w-full border-border text-foreground hover:bg-muted text-xs h-7">
-              <Link href="/admin/users">Manage Users</Link>
-            </Button>
-          </CardContent>
-        </Card>
-        <PlaceholderCard
-          icon={Shield}
-          title="Wazuh Security"
-          description="Security alerts and compliance — Phase 2"
-          phase="Phase 2"
-        />
-        <PlaceholderCard
-          icon={Network}
-          title="Netbird Network"
-          description="Mesh network topology — Phase 2"
-          phase="Phase 2"
-        />
+          <Card className="border-border bg-card self-start" data-testid="dashboard-network-card">
+            <CardHeader className="flex flex-row items-center justify-between py-3">
+              <div className="flex items-center gap-2">
+                <Network className="h-4 w-4 text-blue-400" aria-hidden="true" />
+                <CardTitle className="text-sm font-medium text-foreground">Netbird Network</CardTitle>
+              </div>
+              <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 text-xs">Live</Badge>
+            </CardHeader>
+            <CardContent className="pt-0">
+              {isElevated && (
+                <div className="mb-2">
+                  <Select
+                    value={dashNetworkTenantId !== undefined ? String(dashNetworkTenantId) : ""}
+                    onValueChange={(v) => setDashNetworkTenantId(Number(v))}
+                  >
+                    <SelectTrigger className="h-7 text-xs w-full bg-background border-border">
+                      <SelectValue placeholder="Select tenant..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {networkTenants?.map((t) => (
+                        <SelectItem key={t.id} value={String(t.id)}>
+                          {t.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              {isElevated && dashNetworkTenantId === undefined ? (
+                <p className="text-xs text-muted-foreground">Select tenant to view network summary.</p>
+              ) : networkLoading ? (
+                <Skeleton className="h-8 w-full bg-muted" />
+              ) : networkQueryError ? (
+                <p className="text-xs text-amber-300">Network summary unavailable.</p>
+              ) : networkSummary ? (
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  <div>
+                    <p className="text-muted-foreground">Peers</p>
+                    <p className="font-medium text-foreground">
+                      {networkSummary.tenantConnectedPeers}/{networkSummary.tenantPeers}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Keys</p>
+                    <p className="font-medium text-foreground">{networkSummary.setupKeysActive}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Routes</p>
+                    <p className="font-medium text-foreground">{networkSummary.routeCount}</p>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">No network data available.</p>
+              )}
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="h-7 w-full border-border text-foreground hover:bg-muted text-xs mt-3"
+              >
+                <Link href="/network">Manage Network</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );

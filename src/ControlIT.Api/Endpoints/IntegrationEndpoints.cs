@@ -1,15 +1,16 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // IntegrationEndpoints.cs
-// Registers Netbird (mesh VPN) endpoints in Phase 1, and conditionally
-// registers Wazuh (SIEM) endpoints in Phase 2.
+// Conditionally registers Wazuh (SIEM) endpoints.
 //
 // WHY conditional Wazuh registration: IWazuhClient has no Phase 1 implementation.
 // Registering the routes unconditionally would cause a 500 on every Wazuh request
 // (DI would fail to resolve IWazuhClient). The `if (Wazuh:Enabled)` guard means
 // those routes simply don't exist unless Wazuh is configured.
 //
-// Audit coverage: All state-mutating operations (enrol, delete, acknowledge)
-// write audit entries both before (PENDING) and after (SUCCESS) execution.
+// Netbird endpoints have moved to NetworkEndpoints.cs (Phase 2D/2E).
+//
+// Audit coverage: All state-mutating operations write audit entries both
+// before (PENDING) and after (SUCCESS) execution.
 // ─────────────────────────────────────────────────────────────────────────────
 namespace ControlIT.Api.Endpoints;
 
@@ -22,95 +23,6 @@ public static class IntegrationEndpoints
 {
     public static void Map(WebApplication app)
     {
-        // ── Netbird — Phase 1 ─────────────────────────────────────────────────
-
-        // GET /network/peers — list all Netbird mesh peers
-        app.MapGet("/network/peers", async (INetbirdClient netbird) =>
-        {
-            var peers = await netbird.GetPeersAsync();
-            return Results.Ok(peers);
-        }).RequireRateLimiting("api").RequireAuthorization("TenantMember");
-
-        // GET /network/peers/{id} — get a specific peer by Netbird peer ID
-        app.MapGet("/network/peers/{id}", async (string id, INetbirdClient netbird) =>
-        {
-            var peer = await netbird.GetPeerByIdAsync(id);
-            return peer is null ? Results.NotFound() : Results.Ok(peer);
-        }).RequireRateLimiting("api").RequireAuthorization("TenantMember");
-
-        // POST /network/enrol?setupKey=<key> — enrol a new peer in the mesh network
-        // Writes audit entries before and after for DPDP compliance.
-        app.MapPost("/network/enrol", async (
-            string setupKey,
-            INetbirdClient netbird,
-            IAuditService audit,
-            TenantContext tenant,
-            IActorContext actor) =>
-        {
-            await audit.RecordAsync(new AuditEntry
-            {
-                TenantId = tenant.TenantId ?? 0,
-                ActorKeyId = actor.UserId.ToString(),
-                ActorEmail = actor.Email,
-                Action = "DEVICE_ENROL_MESH",
-                ResourceType = "NetworkPeer",
-                IpAddress = actor.IpAddress,
-                Result = "PENDING"
-            });
-
-            await netbird.EnrolPeerAsync(setupKey);
-
-            await audit.RecordAsync(new AuditEntry
-            {
-                TenantId = tenant.TenantId ?? 0,
-                ActorKeyId = actor.UserId.ToString(),
-                ActorEmail = actor.Email,
-                Action = "DEVICE_ENROL_MESH",
-                ResourceType = "NetworkPeer",
-                IpAddress = actor.IpAddress,
-                Result = "SUCCESS"
-            });
-
-            return Results.Ok();
-        }).RequireRateLimiting("api").RequireAuthorization("TenantMember");
-
-        // DELETE /network/peer/{id} — remove a peer from the mesh network
-        app.MapDelete("/network/peer/{id}", async (
-            string id,
-            INetbirdClient netbird,
-            IAuditService audit,
-            TenantContext tenant,
-            IActorContext actor) =>
-        {
-            await audit.RecordAsync(new AuditEntry
-            {
-                TenantId = tenant.TenantId ?? 0,
-                ActorKeyId = actor.UserId.ToString(),
-                ActorEmail = actor.Email,
-                Action = "NETWORK_PEER_DELETE",
-                ResourceType = "NetworkPeer",
-                ResourceId = id,
-                IpAddress = actor.IpAddress,
-                Result = "PENDING"
-            });
-
-            await netbird.RemovePeerAsync(id);
-
-            await audit.RecordAsync(new AuditEntry
-            {
-                TenantId = tenant.TenantId ?? 0,
-                ActorKeyId = actor.UserId.ToString(),
-                ActorEmail = actor.Email,
-                Action = "NETWORK_PEER_DELETE",
-                ResourceType = "NetworkPeer",
-                ResourceId = id,
-                IpAddress = actor.IpAddress,
-                Result = "SUCCESS"
-            });
-
-            return Results.NoContent();
-        }).RequireRateLimiting("api").RequireAuthorization("TenantMember");
-
         // ── Wazuh — Phase 2 (conditional registration) ───────────────────────
         // These routes are only registered when Wazuh:Enabled = true in config.
         // WHY conditional: IWazuhClient has no Phase 1 implementation.

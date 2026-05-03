@@ -15,6 +15,7 @@ import {
   LogOut,
   KeyRound,
   Server,
+  Network,
 } from "lucide-react"
 import {
   Sidebar,
@@ -27,7 +28,6 @@ import {
   SidebarGroup,
   SidebarGroupContent,
 } from "@/components/ui/sidebar"
-import { Button } from "@/components/ui/button"
 import { useAuth } from "@/components/providers/auth-provider"
 
 const BASE_NAV_ITEMS = [
@@ -37,6 +37,7 @@ const BASE_NAV_ITEMS = [
   { title: "Tenants", url: "/tenants", icon: Building2 },
   { title: "Audit Logs", url: "/audit", icon: ClipboardList },
   { title: "Commands", url: "/commands", icon: Terminal },
+  { title: "Network", url: "/network", icon: Network },
 ]
 
 const ADMIN_NAV_ITEM = { title: "Users", url: "/admin/users", icon: Users }
@@ -89,7 +90,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
   ]
 
   return (
-    <Sidebar collapsible="offcanvas" {...props} style={{ position: "relative" }}>
+    <Sidebar collapsible="offcanvas" {...props}>
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
