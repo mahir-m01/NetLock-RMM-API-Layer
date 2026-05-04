@@ -22,7 +22,7 @@ public interface IPushEventPublisher
 
 public sealed class PushEventHub : IPushEventPublisher
 {
-    private const int ChannelCapacity = 128;
+    private const int ChannelCapacity = 2048;
 
     private readonly ConcurrentDictionary<Guid, Subscriber> _subscribers = new();
 

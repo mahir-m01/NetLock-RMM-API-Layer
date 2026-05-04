@@ -72,4 +72,35 @@ public class PushEventContractTests
 
         Assert.True(PushEventHub.CanReceive(allTenantScope, tenantEvent));
     }
+
+    [Fact]
+    public async Task PushEventHub_BuffersOneThousandDeviceEventsForSubscriber()
+    {
+        var hub = new PushEventHub();
+        var received = new List<PushEventEnvelope>();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        var readTask = Task.Run(async () =>
+        {
+            await foreach (var evt in hub.SubscribeAsync(
+                new PushSubscriptionScope(IsAllTenants: true, TenantId: null),
+                cts.Token))
+            {
+                received.Add(evt);
+                if (received.Count == 1000)
+                    break;
+            }
+        }, cts.Token);
+
+        await Task.Delay(25, cts.Token);
+        for (var i = 1; i <= 1000; i++)
+        {
+            await hub.PublishAsync(
+                PushEventEnvelope.Create(PushEventTypes.DeviceUpdated, 1, new { deviceId = i }),
+                cts.Token);
+        }
+
+        await readTask;
+        Assert.Equal(1000, received.Count);
+    }
 }
