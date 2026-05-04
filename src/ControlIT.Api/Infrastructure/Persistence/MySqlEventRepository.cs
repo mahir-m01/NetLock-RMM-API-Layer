@@ -50,18 +50,22 @@ public class MySqlEventRepository : IEventRepository
         // clause still filters correctly because NULL != tenantId.
         var tenantFilter = tenantContext.IsAllTenants ? "" : "WHERE t.id = @tenantId";
         var sql = $"""
-            SELECT SQL_CALC_FOUND_ROWS
-                e.id, e.device_id, e.tenant_name_snapshot AS TenantName, e.device_name,
-                e.date AS Timestamp,
-                e.severity, e.reported_by,
-                e._event AS Event,
-                e.description
-            FROM events e
-            LEFT JOIN tenants t ON t.name = e.tenant_name_snapshot
-            {tenantFilter}
-            ORDER BY e.date DESC
-            LIMIT @limit OFFSET @offset;
-            SELECT FOUND_ROWS();
+            SELECT
+                    e.id, e.device_id, e.tenant_name_snapshot AS TenantName, e.device_name,
+                    e.date AS Timestamp,
+                    e.severity, e.reported_by,
+                    e._event AS Event,
+                    e.description
+                FROM events e
+                LEFT JOIN tenants t ON t.name = e.tenant_name_snapshot
+                {tenantFilter}
+                ORDER BY e.date DESC
+                LIMIT @limit OFFSET @offset;
+
+                SELECT COUNT(*)
+                FROM events e
+                LEFT JOIN tenants t ON t.name = e.tenant_name_snapshot
+                {tenantFilter};
             """;
 
         using var multi = await conn.QueryMultipleAsync(sql,
