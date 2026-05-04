@@ -24,14 +24,13 @@ ControlIT is designed to sit beside an existing NetLock deployment. NetLock rema
 ## Deployment Requirements
 
 - Docker and Docker Compose.
-- Existing NetLock RMM deployment.
-- Existing NetLock MySQL reachable from ControlIT.
-- Existing NetLock SignalR command hub reachable from ControlIT API.
+- Existing NetLock RMM deployment already installed and healthy.
+- Standard NetLock Docker install on the same host, or manual NetLock connection values for non-standard installs.
 - NetBird Cloud account or self-hosted NetBird Management server.
 - NetBird personal access token with management API access.
 - DNS/TLS/reverse proxy configuration when exposing ControlIT outside a private network.
 
-ControlIT setup expects NetLock to be installed, configured, healthy, and reachable before ControlIT starts.
+ControlIT setup expects NetLock to be installed, configured, healthy, and reachable before ControlIT starts. ControlIT does not ask operators to query NetLock MySQL manually on standard Docker installs. The installer reads NetLock's existing environment, discovers the Docker network, reads the NetLock token/key needed by ControlIT, creates a dedicated least-privilege `controlit_api` database user, and then runs ControlIT with that restricted user.
 
 ## Install
 
@@ -54,18 +53,9 @@ If NetLock is installed somewhere else, use the same parent directory and keep C
 
 The script creates `.env`, generates ControlIT signing/database/bootstrap secrets, and prints initial SuperAdmin credentials once.
 
-3. Fill required `.env` values:
+3. Fill NetBird and browser-facing values in `.env`:
 
 ```bash
-MYSQL_ROOT_PASSWORD=<existing NetLock MySQL root password or migration user password>
-MYSQL_DATABASE=iphbmh
-MYSQL_CONTAINER=mysql-container
-CONTROLIT_DB_HOST=mysql-container
-CONTROLIT_DB_PORT=3306
-NETLOCK_DOCKER_NETWORK=netlock-rmm-api-layer_netlock-network
-CONTROLIT_NETLOCK_TOKEN=<remote_session_token from NetLock accounts table>
-CONTROLIT_NETLOCK_FILES_KEY=<NetLock files_api_key>
-CONTROLIT_NETLOCK_HUB_URL=http://netlock-rmm-server:7080/commandHub
 CONTROLIT_PUBLIC_API_URL=https://api.<your-domain>
 CONTROLIT_ALLOWED_ORIGINS=https://app.<your-domain>
 NETBIRD_BASE_URL=https://api.netbird.io
@@ -74,7 +64,24 @@ NETBIRD_TOKEN=<NetBird personal access token>
 
 For self-hosted NetBird, set `NETBIRD_BASE_URL` to the management API URL.
 
-4. Confirm NetLock services are healthy and reachable from the ControlIT host:
+Standard same-host NetLock Docker values are detected automatically during install:
+
+- NetLock MySQL root password from the existing NetLock `.env`.
+- NetLock database and MySQL container.
+- NetLock Docker network.
+- NetLock SignalR hub URL.
+- NetLock `remote_session_token`.
+- NetLock `files_api_key`.
+
+Manual override is still supported for custom deployments:
+
+```bash
+CONTROLIT_NETLOCK_ENV_FILE=/path/to/netlock/.env ./scripts/install-controlit.sh
+```
+
+or edit the NetLock values directly in `.env`.
+
+4. Confirm NetLock services are healthy:
 
 ```bash
 docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"

@@ -25,6 +25,10 @@ if [[ ! -f "$ENV_FILE" ]]; then
   "$ROOT_DIR/scripts/setup-controlit-env.sh"
 fi
 
+if [[ "${CONTROLIT_SKIP_NETLOCK_DISCOVERY:-}" != "1" ]]; then
+  "$ROOT_DIR/scripts/discover-netlock-env.sh"
+fi
+
 require_env MYSQL_ROOT_PASSWORD
 require_env MYSQL_DATABASE
 require_env CONTROLIT_DB_HOST

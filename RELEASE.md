@@ -10,6 +10,7 @@ NetLock remains vendor-owned. ControlIT reads NetLock data, bridges NetLock live
 - `controlit-web`: Next.js dashboard.
 - `docker-compose.yml`: ControlIT-only Compose deployment.
 - `scripts/setup-controlit-env.sh`: generates `.env` and bootstrap credentials.
+- `scripts/discover-netlock-env.sh`: discovers standard same-host NetLock Docker configuration.
 - `scripts/install-controlit.sh`: applies migrations, creates DB user, starts services, checks readiness.
 - `scripts/check-controlit-update.sh`: checks remote release availability.
 - `scripts/update-controlit.sh`: applies OTA update.
@@ -22,20 +23,20 @@ NetLock remains vendor-owned. ControlIT reads NetLock data, bridges NetLock live
 
 | Variable | Purpose |
 |---|---|
-| `MYSQL_ROOT_PASSWORD` | Existing NetLock MySQL root password or migration user password. |
-| `MYSQL_DATABASE` | Existing NetLock database, default `iphbmh`. |
-| `MYSQL_CONTAINER` | Existing NetLock MySQL container name for local Docker deployments. |
-| `CONTROLIT_DB_HOST` | Existing NetLock MySQL host reachable from ControlIT containers. |
-| `CONTROLIT_DB_PORT` | Existing NetLock MySQL port. |
-| `NETLOCK_DOCKER_NETWORK` | Existing Docker network shared with NetLock. |
+| `MYSQL_ROOT_PASSWORD` | Existing NetLock MySQL root password, auto-discovered for standard Docker installs. |
+| `MYSQL_DATABASE` | Existing NetLock database, default `iphbmh`, auto-discovered when available. |
+| `MYSQL_CONTAINER` | Existing NetLock MySQL container name, default `mysql-container`. |
+| `CONTROLIT_DB_HOST` | Existing NetLock MySQL host reachable from ControlIT containers, default `mysql-container`. |
+| `CONTROLIT_DB_PORT` | Existing NetLock MySQL port, default `3306`. |
+| `NETLOCK_DOCKER_NETWORK` | Existing Docker network shared with NetLock, auto-discovered from MySQL container. |
 | `CONTROLIT_DB_USER` | Dedicated ControlIT runtime DB user. |
 | `CONTROLIT_DB_PASSWORD` | Dedicated ControlIT runtime DB password. |
 | `CONTROLIT_JWT_SIGNING_KEY` | HS256 signing key, at least 32 bytes. |
 | `CONTROLIT_BOOTSTRAP_EMAIL` | Initial SuperAdmin email. |
 | `CONTROLIT_BOOTSTRAP_PASSWORD` | Initial SuperAdmin password. |
-| `CONTROLIT_NETLOCK_TOKEN` | NetLock `remote_session_token` for SignalR command hub. |
-| `CONTROLIT_NETLOCK_FILES_KEY` | NetLock `files_api_key` for admin status endpoints. |
-| `CONTROLIT_NETLOCK_HUB_URL` | NetLock SignalR command hub URL. |
+| `CONTROLIT_NETLOCK_TOKEN` | NetLock `remote_session_token` for SignalR command hub, auto-discovered. |
+| `CONTROLIT_NETLOCK_FILES_KEY` | NetLock `files_api_key` for admin status endpoints, auto-discovered. |
+| `CONTROLIT_NETLOCK_HUB_URL` | NetLock SignalR command hub URL, auto-discovered for standard Docker installs. |
 | `CONTROLIT_PUBLIC_API_URL` | Browser-facing ControlIT API URL baked into web build. |
 | `CONTROLIT_ALLOWED_ORIGINS` | Comma-separated browser origins allowed by ControlIT API CORS. |
 | `NETBIRD_BASE_URL` | NetBird Management API URL. |
@@ -50,13 +51,15 @@ NetLock remains vendor-owned. ControlIT reads NetLock data, bridges NetLock live
 ./scripts/setup-controlit-env.sh
 ```
 
-2. Complete required NetLock and NetBird values in `.env`.
+2. Complete NetBird and browser-facing values in `.env`.
 
 3. Install:
 
 ```bash
 ./scripts/install-controlit.sh
 ```
+
+For standard same-host NetLock Docker installs, the installer auto-discovers NetLock DB/network/token values. For non-standard installs, set `CONTROLIT_NETLOCK_ENV_FILE=/path/to/netlock/.env` or edit the NetLock values in `.env`.
 
 ## Update Flow
 
