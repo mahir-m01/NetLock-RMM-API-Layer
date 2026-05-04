@@ -408,6 +408,23 @@ using (var scope = app.Services.CreateScope())
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ── Bootstrap user sync ──────────────────────────────────────────────────────
+// Normal startup only creates a bootstrap admin when no ControlIT users exist.
+// Install flow can opt into one-time sync so printed setup credentials stay true
+// when reinstalling over an existing controlit_users table.
+{
+    var logger = app.Services.GetRequiredService<ILogger<BootstrapUserSeeder>>();
+    var forceSync = IsEnabled(Environment.GetEnvironmentVariable("CONTROLIT_SYNC_BOOTSTRAP_USER"));
+    await BootstrapUserSeeder.SeedAsync(app.Services, logger, forceSync, CancellationToken.None);
+}
+
+if (IsEnabled(Environment.GetEnvironmentVariable("CONTROLIT_BOOTSTRAP_SYNC_ONLY")))
+{
+    app.Logger.LogInformation("ControlIT bootstrap user synced. Exiting because CONTROLIT_BOOTSTRAP_SYNC_ONLY=true.");
+    return;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 // ── Endpoint registration ─────────────────────────────────────────────────────
 // Each group registers its routes via its static Map(app) method.
 // This Minimal API pattern is lighter than MVC controllers and avoids

@@ -45,6 +45,11 @@ fi
 
 "$ROOT_DIR/scripts/run-controlit-migrations.sh"
 "$ROOT_DIR/scripts/apply-controlit-db-user.sh"
+docker compose -f "$COMPOSE_FILE" run \
+  --rm \
+  -e CONTROLIT_SYNC_BOOTSTRAP_USER=true \
+  -e CONTROLIT_BOOTSTRAP_SYNC_ONLY=true \
+  controlit-api
 docker compose -f "$COMPOSE_FILE" up -d --build
 
 for attempt in {1..30}; do
