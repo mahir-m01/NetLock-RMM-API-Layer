@@ -137,6 +137,8 @@ builder.Services.Configure<ControlIT.Api.Common.Configuration.WazuhOptions>(
     builder.Configuration.GetSection("Wazuh"));
 builder.Services.Configure<ControlIT.Api.Common.Configuration.DatabaseOptions>(
     builder.Configuration.GetSection("Database"));
+builder.Services.Configure<ControlIT.Api.Common.Configuration.NetLockLiveBridgeOptions>(
+    builder.Configuration.GetSection("NetLockLiveBridge"));
 
 // ── HttpClient for NetLock admin API ─────────────────────────────────────
 // Named client "netlockadmin" — used by NetLockAdminClient to call

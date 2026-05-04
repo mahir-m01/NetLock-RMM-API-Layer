@@ -2,12 +2,14 @@ namespace ControlIT.Api.Tests.Unit;
 
 using System.Reflection;
 using ControlIT.Api.Application;
+using ControlIT.Api.Common.Configuration;
 using ControlIT.Api.Domain.DTOs.Requests;
 using ControlIT.Api.Domain.DTOs.Responses;
 using ControlIT.Api.Domain.Interfaces;
 using ControlIT.Api.Domain.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 [Trait("Category", "Unit")]
@@ -37,7 +39,8 @@ public class NetLockLiveBridgeTests
             services.GetRequiredService<IServiceScopeFactory>(),
             netLock,
             publisher,
-            NullLogger<NetLockLiveBridge>.Instance);
+            NullLogger<NetLockLiveBridge>.Instance,
+            Options.Create(new NetLockLiveBridgeOptions()));
 
         await InvokeTickAsync(bridge);
         await InvokeTickAsync(bridge);
@@ -46,6 +49,41 @@ public class NetLockLiveBridgeTests
             e.Type == PushEventTypes.DeviceUpdated && e.TenantId == 3);
         Assert.Contains(publisher.Events, e =>
             e.Type == PushEventTypes.DeviceOffline && e.TenantId == 3);
+    }
+
+    [Fact]
+    public async Task TickAsync_LoadsOneThousandDevicesInTwoPages()
+    {
+        var devices = Enumerable.Range(1, 1000)
+            .Select(id => new Device
+            {
+                Id = id,
+                TenantId = id <= 500 ? 10 : 11,
+                DeviceName = $"device-{id}",
+                AccessKey = $"key-{id}",
+                Platform = "Linux"
+            })
+            .ToArray();
+
+        var repo = new FakeDeviceRepository(devices);
+        var netLock = new FakeNetLockAdminClient(Snapshot(new HashSet<string>(StringComparer.Ordinal)));
+        var publisher = new CapturingPublisher();
+        var services = new ServiceCollection()
+            .AddSingleton<IDeviceRepository>(repo)
+            .BuildServiceProvider();
+
+        var bridge = new NetLockLiveBridge(
+            services.GetRequiredService<IServiceScopeFactory>(),
+            netLock,
+            publisher,
+            NullLogger<NetLockLiveBridge>.Instance,
+            Options.Create(new NetLockLiveBridgeOptions { PageSize = 500 }));
+
+        await InvokeTickAsync(bridge);
+
+        Assert.Equal(1000, publisher.Events.Count(e => e.Type == PushEventTypes.DeviceUpdated));
+        Assert.Equal([1, 2], repo.Filters.Select(f => f.Page).ToArray());
+        Assert.All(repo.Filters, filter => Assert.Equal(500, filter.PageSize));
     }
 
     private static NetLockConnectedDevicesSnapshot Snapshot(IReadOnlySet<string> keys) =>
@@ -99,15 +137,32 @@ public class NetLockLiveBridgeTests
 
     private sealed class FakeDeviceRepository : IDeviceRepository
     {
-        private readonly Device _device;
+        private readonly IReadOnlyList<Device> _devices;
 
-        public FakeDeviceRepository(Device device) => _device = device;
+        public FakeDeviceRepository(params Device[] devices) => _devices = devices;
+
+        public List<DeviceFilter> Filters { get; } = [];
 
         public Task<(IEnumerable<Device> Items, int TotalCount)> GetAllAsync(
             DeviceFilter filter,
             TenantContext tenantContext,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(((IEnumerable<Device>)new[] { _device }, 1));
+            CancellationToken cancellationToken = default)
+        {
+            Filters.Add(new DeviceFilter
+            {
+                Page = filter.Page,
+                PageSize = filter.PageSize,
+                SearchTerm = filter.SearchTerm,
+                OnlineOnly = filter.OnlineOnly
+            });
+
+            var items = _devices
+                .Skip((filter.Page - 1) * filter.PageSize)
+                .Take(filter.PageSize)
+                .ToArray();
+
+            return Task.FromResult(((IEnumerable<Device>)items, _devices.Count));
+        }
 
         public Task<Device?> GetByIdAsync(
             int id,

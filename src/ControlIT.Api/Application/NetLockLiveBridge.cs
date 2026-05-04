@@ -1,20 +1,21 @@
 namespace ControlIT.Api.Application;
 
+using ControlIT.Api.Common.Configuration;
 using ControlIT.Api.Domain.DTOs.Requests;
 using ControlIT.Api.Domain.DTOs.Responses;
 using ControlIT.Api.Domain.Interfaces;
 using ControlIT.Api.Domain.Models;
+using Microsoft.Extensions.Options;
 
 public sealed class NetLockLiveBridge : BackgroundService
 {
-    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(2);
-    private const int PageSize = 500;
     private const string ComponentName = "netlock-live-bridge";
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly INetLockAdminClient _netLock;
     private readonly IPushEventPublisher _publisher;
     private readonly ILogger<NetLockLiveBridge> _logger;
+    private readonly NetLockLiveBridgeOptions _options;
     private readonly Dictionary<int, bool> _lastOnlineByDeviceId = new();
     private DateTimeOffset _lastHealthPublished = DateTimeOffset.MinValue;
     private bool _wasDegraded;
@@ -24,12 +25,14 @@ public sealed class NetLockLiveBridge : BackgroundService
         IServiceScopeFactory scopeFactory,
         INetLockAdminClient netLock,
         IPushEventPublisher publisher,
-        ILogger<NetLockLiveBridge> logger)
+        ILogger<NetLockLiveBridge> logger,
+        IOptions<NetLockLiveBridgeOptions> options)
     {
         _scopeFactory = scopeFactory;
         _netLock = netLock;
         _publisher = publisher;
         _logger = logger;
+        _options = options.Value;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -50,7 +53,7 @@ public sealed class NetLockLiveBridge : BackgroundService
                 await PublishHealthAsync("degraded", "netlock_live_bridge_tick_failed", force: true, stoppingToken);
             }
 
-            await Task.Delay(PollInterval, stoppingToken);
+            await Task.Delay(_options.PollInterval, stoppingToken);
         }
     }
 
@@ -123,7 +126,7 @@ public sealed class NetLockLiveBridge : BackgroundService
         for (var page = 1; ; page++)
         {
             var (items, total) = await devices.GetAllAsync(
-                new DeviceFilter { Page = page, PageSize = PageSize },
+                new DeviceFilter { Page = page, PageSize = _options.ClampedPageSize },
                 tenant,
                 ct);
 
