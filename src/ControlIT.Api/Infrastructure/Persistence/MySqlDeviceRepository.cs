@@ -72,20 +72,21 @@ public class MySqlDeviceRepository : IDeviceRepository
         p.Add("pageSize", filter.PageSize);
         p.Add("offset", offset);
 
-        // SQL_CALC_FOUND_ROWS + FOUND_ROWS() returns the total count alongside paginated results
-        // in a single round-trip, avoiding a separate COUNT(*) query.
         var sql = $"""
-            SELECT SQL_CALC_FOUND_ROWS
-                d.id, d.tenant_id, d.location_id, d.device_name, d.access_key,
-                d.platform, d.operating_system, d.agent_version,
-                d.cpu, d.cpu_usage, d.ram, d.ram_usage,
-                d.ip_address_internal, d.ip_address_external,
-                d.last_access, d.authorized, d.synced
-            FROM devices d
-            WHERE {where}
-            ORDER BY d.device_name
-            LIMIT @pageSize OFFSET @offset;
-            SELECT FOUND_ROWS();
+            SELECT
+                    d.id, d.tenant_id, d.location_id, d.device_name, d.access_key,
+                    d.platform, d.operating_system, d.agent_version,
+                    d.cpu, d.cpu_usage, d.ram, d.ram_usage,
+                    d.ip_address_internal, d.ip_address_external,
+                    d.last_access, d.authorized, d.synced
+                FROM devices d
+                WHERE {where}
+                ORDER BY d.device_name
+                LIMIT @pageSize OFFSET @offset;
+
+                SELECT COUNT(*)
+                FROM devices d
+                WHERE {where};
             """;
 
         using var multi = await conn.QueryMultipleAsync(sql, p);

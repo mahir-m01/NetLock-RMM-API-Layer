@@ -25,7 +25,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { Check, Search, Terminal, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Search, Terminal, X } from "lucide-react";
 
 const MAX_BATCH_TARGETS = 25;
 const DEVICE_PAGE_SIZE = 25;
@@ -61,6 +61,7 @@ export default function CommandsPage() {
   const [timeoutSeconds, setTimeoutSeconds] = useState(30);
   const [search, setSearch] = useState("");
   const [platform, setPlatform] = useState("All");
+  const [devicePage, setDevicePage] = useState(1);
   const [selectedDevices, setSelectedDevices] = useState<Record<number, Device>>({});
   const [inspectedDeviceId, setInspectedDeviceId] = useState<string>("");
   const [elapsed, setElapsed] = useState(0);
@@ -71,11 +72,18 @@ export default function CommandsPage() {
     search: search || undefined,
   };
   const deviceQuery = useQuery({
-    queryKey: ["command-devices", filters],
-    queryFn: () => getDevices(1, DEVICE_PAGE_SIZE, filters),
+    queryKey: ["command-devices", devicePage, DEVICE_PAGE_SIZE, filters],
+    queryFn: () => getDevices(devicePage, DEVICE_PAGE_SIZE, filters),
   });
 
   const visibleDevices = deviceQuery.data?.items ?? [];
+  const totalDeviceCount = deviceQuery.data?.totalCount ?? 0;
+  const totalDevicePages = Math.max(deviceQuery.data?.totalPages ?? 1, 1);
+  const currentDevicePage = deviceQuery.data?.page ?? devicePage;
+  const isDevicePageBusy = deviceQuery.isLoading || deviceQuery.isFetching;
+  const canGoToPreviousDevicePage = devicePage > 1 && !isDevicePageBusy;
+  const canGoToNextDevicePage =
+    devicePage < totalDevicePages && !isDevicePageBusy;
   const selectedDeviceList = useMemo(
     () => Object.values(selectedDevices).sort((a, b) => a.id - b.id),
     [selectedDevices]
@@ -115,6 +123,16 @@ export default function CommandsPage() {
     e.preventDefault();
     if (deviceIds.length === 0 || !command.trim()) return;
     mutation.mutate();
+  }
+
+  function handleSearchChange(value: string) {
+    setSearch(value);
+    setDevicePage(1);
+  }
+
+  function handlePlatformChange(value: string) {
+    setPlatform(value);
+    setDevicePage(1);
   }
 
   function handleToggleDevice(device: Device) {
@@ -177,12 +195,12 @@ export default function CommandsPage() {
                     <Input
                       id="device-search-input"
                       value={search}
-                      onChange={(e) => setSearch(e.target.value)}
+                      onChange={(e) => handleSearchChange(e.target.value)}
                       placeholder="Search devices"
                       className="border-border bg-muted pl-9 text-foreground placeholder:text-muted-foreground"
                     />
                   </div>
-                  <Select value={platform} onValueChange={setPlatform}>
+                  <Select value={platform} onValueChange={handlePlatformChange}>
                     <SelectTrigger className="w-full border-border bg-muted text-foreground sm:w-36">
                       <SelectValue />
                     </SelectTrigger>
@@ -227,6 +245,37 @@ export default function CommandsPage() {
                     Maximum {MAX_BATCH_TARGETS} devices per batch.
                   </p>
                 )}
+                <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-xs text-muted-foreground">
+                    Page {currentDevicePage} of {totalDevicePages} - {totalDeviceCount} devices
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setDevicePage((page) => Math.max(page - 1, 1))}
+                      disabled={!canGoToPreviousDevicePage}
+                      className="h-8 border-border bg-card px-2 text-xs"
+                      aria-label="Previous device page"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      Previous
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setDevicePage((page) => page + 1)}
+                      disabled={!canGoToNextDevicePage}
+                      className="h-8 border-border bg-card px-2 text-xs"
+                      aria-label="Next device page"
+                    >
+                      Next
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-2">
