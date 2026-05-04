@@ -35,12 +35,16 @@ ControlIT setup expects NetLock to be installed, configured, healthy, and reacha
 
 ## Install
 
-1. Clone release branch:
+1. Clone release branch beside the existing NetLock installation:
 
 ```bash
+cd /opt
 git clone -b production https://github.com/mahir-m01/NetLock-RMM-API-Layer.git
-cd NetLock-RMM-API-Layer
+mv NetLock-RMM-API-Layer controlit
+cd controlit
 ```
+
+If NetLock is installed somewhere else, use the same parent directory and keep ControlIT in its own `controlit` folder. Do not place ControlIT files over the NetLock compose file or NetLock `.env`.
 
 2. Generate ControlIT environment and bootstrap credentials:
 
@@ -132,7 +136,13 @@ NetLock installer command must come from the NetLock console so tenant and serve
 
 ## Updates
 
-Current update model: controlled maintenance update. API and web containers restart during the update. Database data remains in the existing NetLock MySQL database. ControlIT schema changes are applied through EF migrations before runtime containers are replaced.
+Current update model: host-level OTA for the ControlIT Compose deployment. API and web containers restart during the update. Database data remains in the existing NetLock MySQL database. ControlIT schema changes are applied through EF migrations before runtime containers are replaced.
+
+Check for update:
+
+```bash
+./scripts/check-controlit-update.sh
+```
 
 Update sequence:
 
@@ -141,6 +151,18 @@ Update sequence:
 ```
 
 The update script backs up `.env`, fast-forwards the `production` branch, applies ControlIT migrations, refreshes least-privilege grants, rebuilds containers, and waits for `/health/ready`.
+
+Enable scheduled OTA updates on Linux/systemd hosts:
+
+```bash
+./scripts/install-controlit-ota.sh
+```
+
+Default schedule: daily around 03:30 with randomized delay. Override with:
+
+```bash
+CONTROLIT_OTA_ON_CALENDAR="*-*-* 02:00:00" ./scripts/install-controlit-ota.sh
+```
 
 Rollback sequence:
 

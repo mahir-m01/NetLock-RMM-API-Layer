@@ -11,6 +11,9 @@ NetLock remains vendor-owned. ControlIT reads NetLock data, bridges NetLock live
 - `docker-compose.yml`: ControlIT-only Compose deployment.
 - `scripts/setup-controlit-env.sh`: generates `.env` and bootstrap credentials.
 - `scripts/install-controlit.sh`: applies migrations, creates DB user, starts services, checks readiness.
+- `scripts/check-controlit-update.sh`: checks remote release availability.
+- `scripts/update-controlit.sh`: applies OTA update.
+- `scripts/install-controlit-ota.sh`: installs systemd timer for scheduled OTA.
 - `scripts/run-controlit-migrations.sh`: applies ControlIT EF migrations.
 - `scripts/apply-controlit-db-user.sh`: creates least-privilege runtime DB grants.
 - `.env.example`: required environment reference.
@@ -57,7 +60,13 @@ NetLock remains vendor-owned. ControlIT reads NetLock data, bridges NetLock live
 
 ## Update Flow
 
-ControlIT updates are designed as controlled maintenance updates. Existing data remains in MySQL. Containers are rebuilt and replaced. API/web downtime equals container restart time plus migration time.
+ControlIT updates are host-level OTA updates for the Compose deployment. Existing data remains in MySQL. Containers are rebuilt and replaced. API/web downtime equals container restart time plus migration time.
+
+Check:
+
+```bash
+./scripts/check-controlit-update.sh
+```
 
 Recommended sequence:
 
@@ -66,6 +75,14 @@ Recommended sequence:
 ```
 
 The script creates an `.env` backup, fast-forwards the release branch, applies ControlIT migrations, refreshes runtime grants, replaces containers, and waits for `/health/ready`.
+
+Scheduled OTA:
+
+```bash
+./scripts/install-controlit-ota.sh
+```
+
+Default schedule: daily around 03:30 with randomized delay. Override `CONTROLIT_OTA_ON_CALENDAR` and `CONTROLIT_OTA_RANDOM_DELAY` when installing the timer.
 
 Rollback sequence:
 
