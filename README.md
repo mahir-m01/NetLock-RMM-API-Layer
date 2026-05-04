@@ -1,44 +1,41 @@
-# ControlIT Alpha Release
+# ControlIT
 
-ControlIT is a business-facing control layer for NetLock RMM with NetBird network visibility. It gives operators one dashboard for device status, live updates, command execution, tenant setup keys, and NetBird peer mapping.
+ControlIT is an operational control layer for NetLock RMM. It adds a focused web dashboard, tenant-aware access control, live device status, command execution, batch command dispatch, NetBird network visibility, setup-key management, audit logging, and system health checks.
 
-This `production` branch is for alpha testers and deployment validation only. Architecture diagrams, university project material, and deep API documentation live on `main` / `dev`.
+ControlIT is designed to sit beside an existing NetLock deployment. NetLock remains the endpoint-management system of record. ControlIT does not install NetLock, does not modify NetLock source, and does not write to NetLock-owned tables.
 
-## What This Release Includes
+## Features
 
-- ControlIT API and dashboard.
-- NetLock integration without editing NetLock source.
-- NetBird Cloud or self-hosted NetBird integration.
-- Generated bootstrap admin credentials during setup.
-- One-time ControlIT database migrations.
+- Web dashboard for operators and administrators.
+- Live dashboard updates through server-sent events.
+- Device inventory sourced from NetLock.
+- Online/offline state sourced from NetLock live connection state.
+- Single-device and batch command execution through NetLock SignalR.
+- Tenant-scoped users, roles, devices, setup keys, and NetBird mappings.
+- NetBird Cloud or self-hosted NetBird Management API support.
+- Existing NetBird group binding for customer-owned networks.
+- ControlIT-managed NetBird tenant group/setup-key flow for new deployments.
+- One-time setup-key reveal. Key lists remain redacted.
+- Audit log for administrative actions.
+- Health endpoints for API, MySQL, NetLock SignalR, and NetBird.
 - Least-privilege runtime database user.
-- Push dashboard updates through SSE.
-- Tenant-scoped NetBird setup key and peer mapping flow.
+- ControlIT-owned database writes limited to `controlit_*` tables.
 
-## Requirements
+## Deployment Requirements
 
-- Docker + Docker Compose.
-- NetLock RMM already installed, configured, and running.
-- Existing NetLock MySQL reachable from the ControlIT Docker network.
-- Existing NetLock SignalR command hub reachable from the ControlIT API container.
-- NetBird account or self-hosted NetBird management server.
+- Docker and Docker Compose.
+- Existing NetLock RMM deployment.
+- Existing NetLock MySQL reachable from ControlIT.
+- Existing NetLock SignalR command hub reachable from ControlIT API.
+- NetBird Cloud account or self-hosted NetBird Management server.
 - NetBird personal access token with management API access.
-- Linux x86_64 host recommended for real demos.
+- DNS/TLS/reverse proxy configuration when exposing ControlIT outside a private network.
 
-ControlIT setup does not install, configure, or start NetLock. Install and verify NetLock first, then add ControlIT on top.
+ControlIT setup expects NetLock to be installed, configured, healthy, and reachable before ControlIT starts.
 
-Alpha networking scope: this release is tested for self-hosted NetLock on the same host, Docker network, or local LAN. Public-domain deployments can work only when DNS/TLS/reverse proxy, `CONTROLIT_PUBLIC_API_URL`, `CONTROLIT_ALLOWED_ORIGINS`, `CONTROLIT_DB_HOST`, and `CONTROLIT_NETLOCK_HUB_URL` are set correctly. Full hosted-domain hardening is not the current alpha target.
+## Install
 
-macOS local demo:
-
-```bash
-brew install colima docker docker-compose
-colima start --arch aarch64 --vm-type vz --vz-rosetta --cpu 4 --memory 6
-```
-
-## Fresh Install
-
-1. Clone production branch:
+1. Clone release branch:
 
 ```bash
 git clone -b production https://github.com/mahir-m01/NetLock-RMM-API-Layer.git
@@ -51,7 +48,7 @@ cd NetLock-RMM-API-Layer
 ./scripts/setup-controlit-env.sh
 ```
 
-This creates `.env`, generates ControlIT-owned passwords/signing keys, and prints initial SuperAdmin login once. It does not install NetLock and does not generate the NetLock MySQL root password.
+The script creates `.env`, generates ControlIT signing/database/bootstrap secrets, and prints initial SuperAdmin credentials once.
 
 3. Fill required `.env` values:
 
@@ -65,49 +62,33 @@ NETLOCK_DOCKER_NETWORK=netlock-rmm-api-layer_netlock-network
 CONTROLIT_NETLOCK_TOKEN=<remote_session_token from NetLock accounts table>
 CONTROLIT_NETLOCK_FILES_KEY=<NetLock files_api_key>
 CONTROLIT_NETLOCK_HUB_URL=http://netlock-rmm-server:7080/commandHub
-CONTROLIT_PUBLIC_API_URL=http://localhost:5290
-CONTROLIT_ALLOWED_ORIGINS=http://localhost:3000
+CONTROLIT_PUBLIC_API_URL=https://api.<your-domain>
+CONTROLIT_ALLOWED_ORIGINS=https://app.<your-domain>
 NETBIRD_BASE_URL=https://api.netbird.io
 NETBIRD_TOKEN=<NetBird personal access token>
 ```
 
-Adjust host, container, and network values if NetLock runs outside this repo's local Docker stack. For self-hosted NetBird, replace `NETBIRD_BASE_URL` with your management API URL.
+For self-hosted NetBird, set `NETBIRD_BASE_URL` to the management API URL.
 
-For a LAN demo, use machine IPs:
-
-```bash
-CONTROLIT_PUBLIC_API_URL=http://<controlit-host-lan-ip>:5290
-CONTROLIT_ALLOWED_ORIGINS=http://<controlit-host-lan-ip>:3000
-```
-
-For a domain demo behind HTTPS:
-
-```bash
-CONTROLIT_PUBLIC_API_URL=https://api.<your-domain>
-CONTROLIT_ALLOWED_ORIGINS=https://app.<your-domain>
-```
-
-4. Confirm NetLock is already healthy:
+4. Confirm NetLock services are healthy and reachable from the ControlIT host:
 
 ```bash
 docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 ```
 
-Expected local containers: `mysql-container`, `netlock-rmm-server`, and `netlock-rmm-web-console`. If using external NetLock, verify MySQL and command hub reachability before continuing.
-
-5. Run ControlIT migrations once:
+5. Apply ControlIT migrations once:
 
 ```bash
 ./scripts/run-controlit-migrations.sh
 ```
 
-6. Create least-privilege runtime DB user:
+6. Create least-privilege ControlIT runtime DB user:
 
 ```bash
 ./scripts/apply-controlit-db-user.sh
 ```
 
-7. Start ControlIT API and dashboard:
+7. Start ControlIT:
 
 ```bash
 docker compose -f docker-compose.controlit.yml up -d --build
@@ -120,100 +101,83 @@ curl -f http://localhost:5290/health/ready
 curl -f http://localhost:3000
 ```
 
-Open dashboard:
+Open the dashboard at the configured web origin and login with the bootstrap SuperAdmin credentials. Change the bootstrap password after first login.
 
-```text
-http://localhost:3000
-```
+## NetBird Setup
 
-Login using bootstrap SuperAdmin credentials printed by setup script.
+Use existing NetBird network:
 
-## Existing NetBird Customer Setup
-
-Use this when customer already has NetBird groups and devices.
-
-1. Add NetBird API values to `.env`.
+1. Set `NETBIRD_BASE_URL` and `NETBIRD_TOKEN`.
 2. Login as SuperAdmin or CpAdmin.
-3. Open Network page.
-4. Pick tenant.
-5. Bind existing NetBird group in external/read-only mode.
+3. Open Network.
+4. Select tenant.
+5. Bind the tenant to an existing NetBird group using `external` or `read_only` mode.
 
-Modes:
+Create ControlIT-managed NetBird path:
 
-| Mode | Use |
-|---|---|
-| `external` | Customer-owned group. ControlIT reads and maps peers, but does not manage ownership. |
-| `read_only` | Visibility-only demo. No ControlIT changes to group/policy. |
-| `managed` | ControlIT-created tenant group/policy for new deployments. |
-
-## New NetBird Tenant Setup
-
-Use this when ControlIT should create the tenant network path.
-
-1. Login as elevated admin.
-2. Open Network page.
+1. Login as SuperAdmin or CpAdmin.
+2. Open Network.
 3. Select tenant.
 4. Create setup key.
 5. Copy raw key immediately. It is shown once only.
-6. Install NetBird agent on device with that key.
-7. Link NetBird peer to NetLock device from Network page.
+6. Install NetBird agent on endpoint with that tenant key.
+7. Link NetBird peer to NetLock device in ControlIT.
 
-## Device Install Pattern
+Modes:
 
-Install both agents per device:
+| Mode | Purpose |
+|---|---|
+| `external` | Customer-owned NetBird group. ControlIT reads and maps peers. |
+| `read_only` | Visibility-only NetBird integration. |
+| `managed` | ControlIT-created tenant group/policy/setup-key flow. |
 
-1. NetLock agent from NetLock console tenant installer.
-2. NetBird agent using tenant setup key.
+## Endpoint Enrollment
 
-For internal/agent testing, use the included Debian Lima VM instead of enrolling personal laptops or random machines:
+Each managed endpoint needs both agents:
 
-```bash
-brew install lima
-limactl start debian-test.yaml
-limactl shell debian-test
-```
+1. NetLock agent from the tenant installer generated by NetLock.
+2. NetBird agent enrolled with the tenant setup key.
 
-Inside the VM, run the NetLock tenant installer from the NetLock console, then run the NetBird setup-key command for the same tenant. This gives a clean disposable test endpoint for dashboard, command, and NetBird peer validation.
-
-Linux NetBird example:
+Linux NetBird enrollment:
 
 ```bash
 curl -fsSL https://pkgs.netbird.io/install.sh | sh
 sudo netbird up --management-url "<netbird_management_url>" --setup-key "<tenant_setup_key>"
 ```
 
-NetLock install command must come from NetLock web console for correct tenant/server values.
+NetLock installer command must come from the NetLock console so tenant and server values match the NetLock deployment.
 
-## Demo Checklist
+## Updates
 
-- Dashboard loads after login.
-- Stream state shows connected.
-- Debian or customer test device appears online without page refresh.
-- Devices page shows NetBird IP when peer linked.
-- Recent Devices shows same NetBird IP state as Devices page.
-- Network page shows peers/setup keys for selected tenant.
-- Setup key list never shows raw key after creation.
-- System health explains degraded NetLock/NetBird parts.
-- No secrets appear in UI or logs.
+Current update model: controlled maintenance update. API and web containers restart during the update. Database data remains in the existing NetLock MySQL database. ControlIT schema changes are applied through EF migrations before runtime containers are replaced.
 
-## Security Notes
-
-- Never commit `.env`.
-- Rotate demo NetBird token/setup keys before real external use.
-- Change bootstrap password immediately.
-- Keep `CONTROLIT_AUTO_MIGRATE=false` for demo/production runtime.
-- Run migrations only through `scripts/run-controlit-migrations.sh`.
-- Runtime API must use `CONTROLIT_DB_USER`, not MySQL root.
-- ControlIT must not edit NetLock source.
-- ControlIT writes only `controlit_*` tables.
-
-## Useful Commands
+Update sequence:
 
 ```bash
-docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+./scripts/update-controlit.sh
+```
+
+The update script backs up `.env`, fast-forwards the `production` branch, applies ControlIT migrations, refreshes least-privilege grants, rebuilds containers, and waits for `/health/ready`.
+
+Rollback sequence:
+
+```bash
+git log --oneline -5
+git checkout <previous-production-commit>
+docker compose -f docker-compose.controlit.yml up -d --build
+curl -f http://localhost:5290/health/ready
+```
+
+Database migrations should stay additive and backward-compatible for smooth updates. Destructive migrations require a backup and a planned maintenance window.
+
+## Operations
+
+```bash
 docker compose -f docker-compose.controlit.yml ps
 docker logs controlit-api --tail=100
 docker logs controlit-web --tail=100
+curl -f http://localhost:5290/health/live
+curl -f http://localhost:5290/health/ready
 ```
 
 Restart ControlIT:
@@ -222,12 +186,24 @@ Restart ControlIT:
 docker compose -f docker-compose.controlit.yml up -d --build
 ```
 
-Stop ControlIT services:
+Stop ControlIT:
 
 ```bash
 docker compose -f docker-compose.controlit.yml down
 ```
 
-## Full Release Notes
+## Security Boundary
 
-See [RELEASE.md](RELEASE.md) for detailed rotation notes, NetBird API examples, and environment variable reference.
+- Keep `.env` private.
+- Rotate bootstrap password after first login.
+- Rotate NetBird tokens and setup keys after operational handoff.
+- Keep `CONTROLIT_AUTO_MIGRATE=false` during runtime.
+- Run migrations only through `scripts/run-controlit-migrations.sh`.
+- Run API with `CONTROLIT_DB_USER`, not MySQL root.
+- ControlIT must not edit NetLock source.
+- ControlIT writes only `controlit_*` tables.
+- NetLock bootstrap/vendor configuration files are external prerequisites, not ControlIT-owned secrets.
+
+## Release Notes
+
+See [RELEASE.md](RELEASE.md) for environment reference, token rotation, update policy, and operational checklist.

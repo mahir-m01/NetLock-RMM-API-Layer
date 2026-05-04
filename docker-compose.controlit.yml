@@ -18,7 +18,7 @@ services:
       CONTROLIT_BOOTSTRAP_PASSWORD: "${CONTROLIT_BOOTSTRAP_PASSWORD}"
       CONTROLIT_NETLOCK_TOKEN: "${CONTROLIT_NETLOCK_TOKEN}"
       CONTROLIT_NETLOCK_FILES_KEY: "${CONTROLIT_NETLOCK_FILES_KEY}"
-      # Production/demo runtime uses least-privilege DB user; run migrations once with root/migration user first.
+      # Runtime uses least-privilege DB user; run migrations once with root/migration user first.
       CONTROLIT_AUTO_MIGRATE: "${CONTROLIT_AUTO_MIGRATE:-false}"
       NetLock__HubUrl: "${CONTROLIT_NETLOCK_HUB_URL:-http://netlock-rmm-server:7080/commandHub}"
       Netbird__BaseUrl: "${NETBIRD_BASE_URL:-https://your-netbird-management-server}"

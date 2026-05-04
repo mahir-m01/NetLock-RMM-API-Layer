@@ -50,10 +50,10 @@ Bootstrap SuperAdmin credentials - shown once:
   password: $CONTROLIT_BOOTSTRAP_PASSWORD
 
 Next:
-  1. Make sure NetLock/MySQL is already running. ControlIT setup does not install or start NetLock.
+  1. Confirm NetLock/MySQL is already running. ControlIT setup does not install or start NetLock.
   2. Fill MYSQL_ROOT_PASSWORD, CONTROLIT_NETLOCK_TOKEN, CONTROLIT_NETLOCK_FILES_KEY, NETBIRD_BASE_URL, NETBIRD_TOKEN in .env.
-  3. Run migrations once with privileged DB credentials.
-  4. Create least-privilege runtime DB user with scripts/init-controlit-db-user.sql.
+  3. Run ControlIT migrations once with privileged DB credentials.
+  4. Create the least-privilege runtime DB user.
 
 Keep .env private. It is ignored by git.
 EOF
