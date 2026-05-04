@@ -30,9 +30,9 @@ describe("CommandsPage", () => {
     });
   });
 
-  it("renders the device ID input field", () => {
+  it("renders the device IDs input field", () => {
     render(<CommandsPage />);
-    expect(screen.getByLabelText(/Device ID/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Device IDs/i)).toBeInTheDocument();
   });
 
   it("renders the command textarea", () => {
@@ -48,7 +48,7 @@ describe("CommandsPage", () => {
   it("renders the submit button", () => {
     render(<CommandsPage />);
     expect(
-      screen.getByRole("button", { name: /Execute Command/i })
+      screen.getByRole("button", { name: /Run Batch/i })
     ).toBeInTheDocument();
   });
 

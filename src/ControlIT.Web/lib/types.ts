@@ -160,6 +160,28 @@ export interface ExecuteCommandResponse {
   [key: string]: unknown;
 }
 
+export interface BatchCommandRequest {
+  deviceIds: number[];
+  command: string;
+  shell: Shell;
+  timeoutSeconds: number;
+}
+
+export interface BatchCommandResult {
+  deviceId: number;
+  status: "SUCCESS" | "TIMEOUT" | "FAILURE" | string;
+  message: string;
+  output?: string;
+  executedAt?: string;
+}
+
+export interface BatchCommandResponse {
+  requestedCount: number;
+  successCount: number;
+  failureCount: number;
+  results: BatchCommandResult[];
+}
+
 // ─── System Health ───────────────────────────────────────────────────────────
 
 export interface ComponentHealth {

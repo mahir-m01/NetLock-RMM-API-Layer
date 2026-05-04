@@ -13,7 +13,6 @@ import {
   WifiOff,
   Building2,
   Zap,
-  AlertTriangle,
   Terminal,
   ClipboardList,
   Network,
@@ -201,7 +200,7 @@ export default function DashboardPage() {
       )}
 
       {/* Row 1 — KPI cards */}
-      <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
         <StatCard
           title="Total Devices"
           value={stats?.totalDevices}
@@ -223,14 +222,7 @@ export default function DashboardPage() {
           accent="red"
         />
         <StatCard
-          title="Critical Alerts"
-          value={stats?.criticalAlerts}
-          icon={AlertTriangle}
-          loading={statsLoading}
-          accent="red"
-        />
-        <StatCard
-          title="Total Events"
+          title="NetLock Events"
           value={stats?.totalEvents}
           icon={Zap}
           loading={statsLoading}
