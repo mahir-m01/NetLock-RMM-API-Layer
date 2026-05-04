@@ -1,6 +1,12 @@
 import "@testing-library/jest-dom";
 import { setAccessToken, clearTokens } from "@/lib/auth";
-import { bindTenantGroup, getDevices, getHealth, ApiError } from "@/lib/api";
+import {
+  bindTenantGroup,
+  executeBatchCommand,
+  getDevices,
+  getHealth,
+  ApiError,
+} from "@/lib/api";
 
 // Mock fetch globally
 const mockFetch = jest.fn();
@@ -109,6 +115,30 @@ describe("bindTenantGroup", () => {
     expect(url).toContain("/network/tenant-group?targetTenantId=3");
     expect(init.method).toBe("POST");
     expect(init.body).toBe(JSON.stringify({ groupId: "group-1", mode: "external" }));
+  });
+});
+
+describe("executeBatchCommand", () => {
+  beforeEach(() => {
+    mockFetch.mockReset();
+    clearTokens();
+  });
+
+  it("posts batch commands to the expected endpoint", async () => {
+    const payload = {
+      deviceIds: [27, 28],
+      command: "uptime",
+      shell: "bash" as const,
+      timeoutSeconds: 30,
+    };
+    mockFetch.mockResolvedValueOnce(makeFetchResponse({ results: [] }));
+
+    await executeBatchCommand(payload);
+
+    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("/commands/batch");
+    expect(init.method).toBe("POST");
+    expect(init.body).toBe(JSON.stringify(payload));
   });
 });
 

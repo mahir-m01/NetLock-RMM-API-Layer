@@ -8,6 +8,8 @@ import type {
   EventsResponse,
   Tenant,
   AuditLog,
+  BatchCommandRequest,
+  BatchCommandResponse,
   ExecuteCommandRequest,
   ExecuteCommandResponse,
   DeviceFilters,
@@ -239,6 +241,15 @@ export async function executeCommand(
   payload: ExecuteCommandRequest
 ): Promise<ExecuteCommandResponse> {
   return request<ExecuteCommandResponse>("/commands/execute", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function executeBatchCommand(
+  payload: BatchCommandRequest
+): Promise<BatchCommandResponse> {
+  return request<BatchCommandResponse>("/commands/batch", {
     method: "POST",
     body: JSON.stringify(payload),
   });

@@ -83,7 +83,12 @@ export default function EventsPage() {
                   colSpan={5}
                   className="py-10 text-center text-muted-foreground"
                 >
-                  No events found.
+                  <span className="block font-medium text-foreground">
+                    No NetLock events recorded yet.
+                  </span>
+                  <span className="mt-1 block text-xs">
+                    Device activity will appear here after agents report events.
+                  </span>
                 </TableCell>
               </TableRow>
             ) : (
