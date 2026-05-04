@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${CONTROLIT_ENV_FILE:-$ROOT_DIR/.env}"
+COMPOSE_FILE="${CONTROLIT_COMPOSE_FILE:-$ROOT_DIR/docker-compose.yml}"
 
 read_env() {
   local key="$1"
@@ -40,7 +41,7 @@ CONTROLIT_DB_PORT="${CONTROLIT_DB_PORT:-3306}"
 
 CONTROLIT_DB_CONNECTION="Server=$CONTROLIT_DB_HOST;Port=$CONTROLIT_DB_PORT;Database=$MYSQL_DATABASE;User=root;Password=$MYSQL_ROOT_PASSWORD;"
 
-docker compose -f "$ROOT_DIR/docker-compose.controlit.yml" run \
+docker compose -f "$COMPOSE_FILE" run \
   --rm \
   --build \
   -e CONTROLIT_MIGRATE_ONLY=true \

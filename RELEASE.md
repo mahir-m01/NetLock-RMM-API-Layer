@@ -8,8 +8,9 @@ NetLock remains vendor-owned. ControlIT reads NetLock data, bridges NetLock live
 
 - `controlit-api`: ASP.NET Core API.
 - `controlit-web`: Next.js dashboard.
-- `docker-compose.controlit.yml`: ControlIT-only Compose deployment.
+- `docker-compose.yml`: ControlIT-only Compose deployment.
 - `scripts/setup-controlit-env.sh`: generates `.env` and bootstrap credentials.
+- `scripts/install-controlit.sh`: applies migrations, creates DB user, starts services, checks readiness.
 - `scripts/run-controlit-migrations.sh`: applies ControlIT EF migrations.
 - `scripts/apply-controlit-db-user.sh`: creates least-privilege runtime DB grants.
 - `.env.example`: required environment reference.
@@ -48,29 +49,10 @@ NetLock remains vendor-owned. ControlIT reads NetLock data, bridges NetLock live
 
 2. Complete required NetLock and NetBird values in `.env`.
 
-3. Apply migrations:
+3. Install:
 
 ```bash
-./scripts/run-controlit-migrations.sh
-```
-
-4. Create runtime DB user:
-
-```bash
-./scripts/apply-controlit-db-user.sh
-```
-
-5. Start services:
-
-```bash
-docker compose -f docker-compose.controlit.yml up -d --build
-```
-
-6. Check readiness:
-
-```bash
-curl -f http://localhost:5290/health/ready
-curl -f http://localhost:3000
+./scripts/install-controlit.sh
 ```
 
 ## Update Flow
@@ -90,7 +72,7 @@ Rollback sequence:
 ```bash
 git log --oneline -5
 git checkout <previous-production-commit>
-docker compose -f docker-compose.controlit.yml up -d --build
+docker compose up -d --build
 curl -f http://localhost:5290/health/ready
 ```
 
@@ -143,7 +125,7 @@ Setup keys are reusable secrets. ControlIT reveals a raw setup key only once at 
 Useful commands:
 
 ```bash
-docker compose -f docker-compose.controlit.yml ps
+docker compose ps
 docker logs controlit-api --tail=100
 docker logs controlit-web --tail=100
 ```

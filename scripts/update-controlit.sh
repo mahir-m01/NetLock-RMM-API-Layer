@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${CONTROLIT_ENV_FILE:-$ROOT_DIR/.env}"
+COMPOSE_FILE="${CONTROLIT_COMPOSE_FILE:-$ROOT_DIR/docker-compose.yml}"
 BRANCH="${CONTROLIT_RELEASE_BRANCH:-production}"
 HEALTH_URL="${CONTROLIT_HEALTH_URL:-http://localhost:5290/health/ready}"
 
@@ -22,7 +23,7 @@ git pull --ff-only origin "$BRANCH"
 
 ./scripts/run-controlit-migrations.sh
 ./scripts/apply-controlit-db-user.sh
-docker compose -f docker-compose.controlit.yml up -d --build
+docker compose -f "$COMPOSE_FILE" up -d --build
 
 for attempt in {1..30}; do
   if curl -fsS "$HEALTH_URL" >/dev/null; then

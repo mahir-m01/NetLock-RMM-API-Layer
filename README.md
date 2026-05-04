@@ -76,30 +76,13 @@ For self-hosted NetBird, set `NETBIRD_BASE_URL` to the management API URL.
 docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 ```
 
-5. Apply ControlIT migrations once:
+5. Install ControlIT:
 
 ```bash
-./scripts/run-controlit-migrations.sh
+./scripts/install-controlit.sh
 ```
 
-6. Create least-privilege ControlIT runtime DB user:
-
-```bash
-./scripts/apply-controlit-db-user.sh
-```
-
-7. Start ControlIT:
-
-```bash
-docker compose -f docker-compose.controlit.yml up -d --build
-```
-
-8. Verify:
-
-```bash
-curl -f http://localhost:5290/health/ready
-curl -f http://localhost:3000
-```
+The install script applies ControlIT migrations, creates the least-privilege runtime DB user, starts API/web containers, and waits for `/health/ready`.
 
 Open the dashboard at the configured web origin and login with the bootstrap SuperAdmin credentials. Change the bootstrap password after first login.
 
@@ -164,7 +147,7 @@ Rollback sequence:
 ```bash
 git log --oneline -5
 git checkout <previous-production-commit>
-docker compose -f docker-compose.controlit.yml up -d --build
+docker compose up -d --build
 curl -f http://localhost:5290/health/ready
 ```
 
@@ -173,7 +156,7 @@ Database migrations should stay additive and backward-compatible for smooth upda
 ## Operations
 
 ```bash
-docker compose -f docker-compose.controlit.yml ps
+docker compose ps
 docker logs controlit-api --tail=100
 docker logs controlit-web --tail=100
 curl -f http://localhost:5290/health/live
@@ -183,13 +166,13 @@ curl -f http://localhost:5290/health/ready
 Restart ControlIT:
 
 ```bash
-docker compose -f docker-compose.controlit.yml up -d --build
+docker compose up -d --build
 ```
 
 Stop ControlIT:
 
 ```bash
-docker compose -f docker-compose.controlit.yml down
+docker compose down
 ```
 
 ## Security Boundary
