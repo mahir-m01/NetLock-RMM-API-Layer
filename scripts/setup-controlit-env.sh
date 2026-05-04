@@ -19,7 +19,6 @@ random_secret() {
   openssl rand -base64 48 | tr -d '\n'
 }
 
-MYSQL_ROOT_PASSWORD="${MYSQL_ROOT_PASSWORD:-$(random_secret)}"
 CONTROLIT_JWT_SIGNING_KEY="${CONTROLIT_JWT_SIGNING_KEY:-$(random_secret)}"
 CONTROLIT_DB_PASSWORD="${CONTROLIT_DB_PASSWORD:-$(random_secret)}"
 CONTROLIT_BOOTSTRAP_PASSWORD="${CONTROLIT_BOOTSTRAP_PASSWORD:-$(random_secret)}"
@@ -31,7 +30,6 @@ trap 'rm -f "$tmp_file"' EXIT
 
 while IFS= read -r line || [[ -n "$line" ]]; do
   case "$line" in
-    MYSQL_ROOT_PASSWORD=*) echo "MYSQL_ROOT_PASSWORD=$MYSQL_ROOT_PASSWORD" ;;
     CONTROLIT_JWT_SIGNING_KEY=*) echo "CONTROLIT_JWT_SIGNING_KEY=$CONTROLIT_JWT_SIGNING_KEY" ;;
     CONTROLIT_BOOTSTRAP_EMAIL=*) echo "CONTROLIT_BOOTSTRAP_EMAIL=$CONTROLIT_BOOTSTRAP_EMAIL" ;;
     CONTROLIT_BOOTSTRAP_PASSWORD=*) echo "CONTROLIT_BOOTSTRAP_PASSWORD=$CONTROLIT_BOOTSTRAP_PASSWORD" ;;
@@ -52,9 +50,9 @@ Bootstrap SuperAdmin credentials - shown once:
   password: $CONTROLIT_BOOTSTRAP_PASSWORD
 
 Next:
-  1. Fill CONTROLIT_NETLOCK_TOKEN, CONTROLIT_NETLOCK_FILES_KEY, NETBIRD_BASE_URL, NETBIRD_TOKEN in .env.
-  2. Run migrations once with privileged DB credentials.
-  3. Create least-privilege runtime DB user with scripts/init-controlit-db-user.sql.
+  1. Confirm NetLock/MySQL is already running. ControlIT setup does not install or start NetLock.
+  2. Fill NETBIRD_BASE_URL and NETBIRD_TOKEN in .env.
+  3. Run ./scripts/install-controlit.sh. Standard NetLock Docker installs are detected automatically.
 
 Keep .env private. It is ignored by git.
 EOF

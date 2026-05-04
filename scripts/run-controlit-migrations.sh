@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${CONTROLIT_ENV_FILE:-$ROOT_DIR/.env}"
+COMPOSE_FILE="${CONTROLIT_COMPOSE_FILE:-$ROOT_DIR/docker-compose.controlit.yml}"
 
 read_env() {
   local key="$1"
@@ -25,6 +26,8 @@ fi
 
 MYSQL_DATABASE="${MYSQL_DATABASE:-$(read_env MYSQL_DATABASE)}"
 MYSQL_ROOT_PASSWORD="${MYSQL_ROOT_PASSWORD:-$(read_env MYSQL_ROOT_PASSWORD)}"
+CONTROLIT_DB_HOST="${CONTROLIT_DB_HOST:-$(read_env CONTROLIT_DB_HOST)}"
+CONTROLIT_DB_PORT="${CONTROLIT_DB_PORT:-$(read_env CONTROLIT_DB_PORT)}"
 
 require_safe_identifier "MYSQL_DATABASE" "$MYSQL_DATABASE"
 
@@ -33,9 +36,12 @@ if [[ -z "$MYSQL_ROOT_PASSWORD" ]]; then
   exit 1
 fi
 
-CONTROLIT_DB_CONNECTION="Server=172.18.0.3;Port=3306;Database=$MYSQL_DATABASE;User=root;Password=$MYSQL_ROOT_PASSWORD;"
+CONTROLIT_DB_HOST="${CONTROLIT_DB_HOST:-mysql-container}"
+CONTROLIT_DB_PORT="${CONTROLIT_DB_PORT:-3306}"
 
-docker compose -f "$ROOT_DIR/docker-compose.controlit.yml" run \
+CONTROLIT_DB_CONNECTION="Server=$CONTROLIT_DB_HOST;Port=$CONTROLIT_DB_PORT;Database=$MYSQL_DATABASE;User=root;Password=$MYSQL_ROOT_PASSWORD;"
+
+docker compose -f "$COMPOSE_FILE" run \
   --rm \
   --build \
   -e CONTROLIT_MIGRATE_ONLY=true \
