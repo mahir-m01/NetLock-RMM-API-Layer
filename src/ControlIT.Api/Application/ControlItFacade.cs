@@ -31,6 +31,8 @@ public class ControlItFacade
     private readonly IEndpointProvider _endpoint;
     private readonly IAuditService _audit;
     private readonly INetLockAdminClient _netLockAdmin;
+    private readonly INetbirdMappingRepository _netbirdMappings;
+    private readonly IPushEventPublisher _pushEvents;
     private readonly ILogger<ControlItFacade> _logger;
 
     public ControlItFacade(
@@ -41,6 +43,8 @@ public class ControlItFacade
         IEndpointProvider endpoint,
         IAuditService audit,
         INetLockAdminClient netLockAdmin,
+        INetbirdMappingRepository netbirdMappings,
+        IPushEventPublisher pushEvents,
         ILogger<ControlItFacade> logger)
     {
         _devices = devices;
@@ -50,6 +54,8 @@ public class ControlItFacade
         _endpoint = endpoint;
         _audit = audit;
         _netLockAdmin = netLockAdmin;
+        _netbirdMappings = netbirdMappings;
+        _pushEvents = pushEvents;
         _logger = logger;
     }
 
@@ -63,18 +69,20 @@ public class ControlItFacade
         CancellationToken ct = default)
     {
         // Fetch devices and connected keys in parallel — both are read-only and independent.
-        var devicesTask      = _devices.GetAllAsync(filter, tenant, ct);
+        var devicesTask = _devices.GetAllAsync(filter, tenant, ct);
         var connectedKeysTask = _netLockAdmin.GetConnectedAccessKeysAsync(ct);
         await Task.WhenAll(devicesTask, connectedKeysTask);
 
         var (items, total) = devicesTask.Result;
-        var connected       = connectedKeysTask.Result;
+        var connected = connectedKeysTask.Result;
+        var netbirdMaps = await _netbirdMappings.GetByDeviceIdsAsync(items.Select(d => d.Id), ct);
 
         var dtos = items.Select(d =>
         {
             // IsOnline: device's access_key is in NetLock's live SignalR connection set.
             // Same source NetLock's own web console uses — instant disconnect detection.
             var isOnline = connected.Contains(d.AccessKey);
+            netbirdMaps.TryGetValue(d.Id, out var netbird);
             return new DeviceResponse
             {
                 Id = d.Id,
@@ -90,7 +98,10 @@ public class ControlItFacade
                 IsOnline = isOnline,
                 CpuUsage = isOnline ? d.CpuUsage : null,
                 RamUsage = isOnline ? d.RamUsage : null,
-                LastAccess = d.LastAccess
+                LastAccess = d.LastAccess,
+                NetbirdIp = netbird?.NetbirdIp,
+                NetbirdPeerId = netbird?.NetbirdPeerId,
+                NetbirdHostname = netbird?.NetbirdHostname
             };
         });
 
@@ -112,7 +123,8 @@ public class ControlItFacade
         if (d is null) return null;
 
         var connected = await _netLockAdmin.GetConnectedAccessKeysAsync(ct);
-        var isOnline  = connected.Contains(d.AccessKey);
+        var isOnline = connected.Contains(d.AccessKey);
+        var netbird = await _netbirdMappings.GetByDeviceIdAsync(d.Id, ct);
 
         return new DeviceResponse
         {
@@ -129,7 +141,10 @@ public class ControlItFacade
             IsOnline = isOnline,
             CpuUsage = isOnline ? d.CpuUsage : null,
             RamUsage = isOnline ? d.RamUsage : null,
-            LastAccess = d.LastAccess
+            LastAccess = d.LastAccess,
+            NetbirdIp = netbird?.NetbirdIp,
+            NetbirdPeerId = netbird?.NetbirdPeerId,
+            NetbirdHostname = netbird?.NetbirdHostname
         };
     }
 
@@ -139,32 +154,61 @@ public class ControlItFacade
         TenantContext tenant, CancellationToken ct = default)
     {
         // Run all independent reads in parallel.
-        var devicesTask       = _devices.GetAllAsync(new DeviceFilter { PageSize = 1 }, tenant, ct);
-        var accessKeysTask    = _devices.GetAllAccessKeysAsync(tenant, ct);
+        var devicesTask = _devices.GetAllAsync(new DeviceFilter { PageSize = 1 }, tenant, ct);
+        var accessKeysTask = _devices.GetAllAccessKeysAsync(tenant, ct);
         var connectedKeysTask = _netLockAdmin.GetConnectedAccessKeysAsync(ct);
-        var eventsTask        = _events.GetAllAsync(tenant, 1, 0, ct);
-        var tenantsTask       = _tenants.CountAsync(ct);
+        var eventsTask = _events.GetAllAsync(tenant, 1, 0, ct);
+        var tenantsTask = _tenants.CountAsync(ct);
 
         await Task.WhenAll(devicesTask, accessKeysTask, connectedKeysTask, eventsTask, tenantsTask);
 
         var (_, totalDevices) = devicesTask.Result;
-        var (_, totalEvents)  = eventsTask.Result;
+        var (_, totalEvents) = eventsTask.Result;
 
         // Online count: tenant devices whose access_key is in NetLock's live connection set.
         // This is exactly how NetLock's own web console computes online status.
-        var connected   = connectedKeysTask.Result;
-        var allKeys     = accessKeysTask.Result;
+        var connected = connectedKeysTask.Result;
+        var allKeys = accessKeysTask.Result;
         var onlineCount = allKeys.Count(k => connected.Contains(k));
 
         return new DashboardSummary
         {
-            TotalDevices   = totalDevices,
-            OnlineDevices  = onlineCount,
-            TotalTenants   = tenantsTask.Result,
-            TotalEvents    = totalEvents,
+            TotalDevices = totalDevices,
+            OnlineDevices = onlineCount,
+            TotalTenants = tenantsTask.Result,
+            TotalEvents = totalEvents,
             CriticalAlerts = 0,   // Phase 2: Wazuh integration
-            ServerTime     = DateTime.UtcNow
+            ServerTime = DateTime.UtcNow
         };
+    }
+
+    public async Task<IReadOnlyList<PushEventEnvelope>> GetDashboardPushSnapshotAsync(
+        TenantContext tenant, CancellationToken ct = default)
+    {
+        var events = new List<PushEventEnvelope>();
+        var summary = await GetDashboardSummaryAsync(tenant, ct);
+        var dashboard = PushEventFactory.Dashboard(summary);
+
+        for (var page = 1; ; page++)
+        {
+            var result = await GetDevicesAsync(
+                new DeviceFilter { Page = page, PageSize = 500 },
+                tenant,
+                ct);
+
+            events.AddRange(result.Items.Select(device =>
+                PushEventFactory.DeviceUpdated(device, dashboard)));
+            if (events.Count >= result.TotalCount || result.TotalCount == 0)
+                break;
+        }
+
+        events.Add(PushEventFactory.SystemHealth(
+            "dashboard-stream",
+            "healthy",
+            null,
+            dashboard));
+
+        return events;
     }
 
     // ── Commands ──────────────────────────────────────────────────────────────
@@ -186,17 +230,48 @@ public class ControlItFacade
             ?? throw new KeyNotFoundException(
                 $"Device {request.DeviceId} not found in tenant scope.");
 
+        await PublishCommandStatusAsync(device, "PENDING", "dispatch_started", ct);
+
         // Pre-flight: reject immediately if the device is not connected to NetLock's hub.
         // Uses the same live connection set as the devices list — instant accuracy.
         var connected = await _netLockAdmin.GetConnectedAccessKeysAsync(ct);
         if (!connected.Contains(device.AccessKey))
+        {
+            await PublishCommandStatusAsync(device, "FAILURE", "device_offline", ct);
             throw new InvalidOperationException(
                 $"Device '{device.DeviceName}' is offline (last seen: {device.LastAccess:u}). Command not dispatched.");
+        }
 
         // Dispatch the command via the injected dispatcher (SignalRCommandDispatcher).
         // Throws TimeoutException or InvalidOperationException on failure.
-        return await _commands.DispatchAsync(device.AccessKey, request, ct);
+        try
+        {
+            var result = await _commands.DispatchAsync(device.AccessKey, request, ct);
+            await PublishCommandStatusAsync(device, "SUCCESS", "dispatch_succeeded", ct);
+            return result;
+        }
+        catch (TimeoutException)
+        {
+            await PublishCommandStatusAsync(device, "TIMEOUT", "timeout", ct);
+            throw;
+        }
+        catch (InvalidOperationException ex)
+        {
+            var message = ex.Message.Contains("already pending", StringComparison.OrdinalIgnoreCase)
+                ? "already_pending"
+                : "command_unavailable";
+            await PublishCommandStatusAsync(device, "FAILURE", message, ct);
+            throw;
+        }
     }
+
+    private ValueTask PublishCommandStatusAsync(
+        Device device,
+        string status,
+        string message,
+        CancellationToken ct) =>
+        _pushEvents.PublishAsync(
+            PushEventFactory.CommandStatus(device.TenantId, device.Id, status, message), ct);
 
     // ── Events ────────────────────────────────────────────────────────────────
 

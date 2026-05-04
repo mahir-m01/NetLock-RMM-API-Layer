@@ -60,15 +60,15 @@ public class SignalRCommandDispatcher : ICommandDispatcher
 
         var commandJson = JsonSerializer.Serialize(new
         {
-            type            = 0,
-            wait_response   = true,
+            type = 0,
+            wait_response = true,
             powershell_code = encodedCommand,       // Base64-encoded command text
-            command         = timeoutSeconds.ToString()  // timeout as string in the command field
+            command = timeoutSeconds.ToString()  // timeout as string in the command field
         });
 
         _logger.LogInformation(
-            "Dispatching command to device {AccessKey}, shell={Shell}, timeout={Timeout}s",
-            deviceAccessKey, request.Shell, timeoutSeconds);
+            "Dispatching command to device {DeviceId}, shell={Shell}, timeout={Timeout}s",
+            request.DeviceId, request.Shell, timeoutSeconds);
 
         // Delegate to NetLockSignalRService. This will block (async await) until either:
         // - The device responds (→ returns output string)
@@ -79,7 +79,7 @@ public class SignalRCommandDispatcher : ICommandDispatcher
         // Status is set here; the caller (CommandEndpoints) writes the audit record.
         return new CommandResult
         {
-            DeviceId = deviceAccessKey,
+            DeviceId = request.DeviceId.ToString(),
             Output = rawResult,
             ExecutedAt = DateTime.UtcNow,
             Status = "SUCCESS"

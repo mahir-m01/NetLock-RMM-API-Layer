@@ -20,13 +20,16 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using ControlIT.Api.Domain.Models;
+using ControlIT.Api.Tests.Fixtures;
 using Xunit;
 
 /// <summary>
 /// Integration tests for all business endpoints. One [Fact] per behaviour.
-/// All tests share a single HttpClient with a SuperAdmin JWT pre-set via IClassFixture.
+/// All tests share a single HttpClient with a SuperAdmin JWT pre-set via the
+/// Database collection fixture (Testcontainers MySQL).
 /// </summary>
-public class EndpointIntegrationTests : IClassFixture<ControlItWebApplicationFactory>
+[Collection("Database")]
+public class EndpointIntegrationTests
 {
     private readonly ControlItWebApplicationFactory _factory;
     private readonly HttpClient _client;
@@ -54,11 +57,14 @@ public class EndpointIntegrationTests : IClassFixture<ControlItWebApplicationFac
 
     // ── Constructor ───────────────────────────────────────────────────────────
 
-    public EndpointIntegrationTests(ControlItWebApplicationFactory factory)
+    public EndpointIntegrationTests(MySqlContainerFixture dbFixture)
     {
-        _factory = factory;
-        _client = factory.CreateClient();
-        var token = factory.IssueToken(Role.SuperAdmin);
+        _factory = new ControlItWebApplicationFactory
+        {
+            DatabaseConnectionString = dbFixture.ConnectionString
+        };
+        _client = _factory.CreateClient();
+        var token = _factory.IssueToken(Role.SuperAdmin);
         _client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", token);
     }

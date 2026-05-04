@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useRef, useState } from "react";
+import { use, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { getDevice, executeCommand } from "@/lib/api";
@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import { ArrowLeft, Terminal, X, GripHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { NetbirdStatus } from "@/components/network/netbird-status";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -47,6 +48,15 @@ function DetailRow({ label, value, dim }: { label: string; value: string | numbe
     <div className="flex flex-col gap-0.5 py-3 border-b border-border last:border-0">
       <span className="text-xs text-muted-foreground">{label}</span>
       <span className={`text-sm font-mono break-all ${dim ? "text-muted-foreground italic" : "text-foreground"}`}>{display}</span>
+    </div>
+  );
+}
+
+function DetailContentRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-0.5 py-3 border-b border-border last:border-0">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="text-sm">{children}</span>
     </div>
   );
 }
@@ -379,7 +389,9 @@ export default function DeviceDetailPage({ params }: PageProps) {
             <DetailRow label="Agent Version" value={device.agentVersion} />
             <DetailRow label="IP Address (Internal)" value={device.ipAddressInternal} />
             <DetailRow label="IP Address (External)" value={device.ipAddressExternal} />
-            <DetailRow label="Netbird IP" value="Not configured" dim />
+            <DetailContentRow label="NetBird IP">
+              <NetbirdStatus device={device} showNetworkLink />
+            </DetailContentRow>
             <DetailRow label="CPU Usage" value={device.cpuUsage !== null ? `${device.cpuUsage?.toFixed(1)}%` : null} />
             <DetailRow label="RAM Usage" value={device.ramUsage !== null ? `${device.ramUsage?.toFixed(1)}%` : null} />
             <DetailRow

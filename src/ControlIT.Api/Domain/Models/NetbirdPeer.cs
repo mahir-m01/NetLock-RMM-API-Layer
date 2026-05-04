@@ -28,4 +28,25 @@ public class NetbirdPeer
 
     // Timestamp of the last connection/heartbeat from this peer
     public DateTime LastSeen { get; set; }
+
+    public string Hostname { get; set; } = string.Empty;
+    public string DnsLabel { get; set; } = string.Empty;
+    public string Version { get; set; } = string.Empty;
+    public string UserId { get; set; } = string.Empty;
+    public string CountryCode { get; set; } = string.Empty;
+    public string CityName { get; set; } = string.Empty;
+    public string ConnectionIp { get; set; } = string.Empty;
+    public string SerialNumber { get; set; } = string.Empty;
+    public bool SshEnabled { get; set; }
+    public bool LoginExpired { get; set; }
+    public bool LoginExpirationEnabled { get; set; }
+    public int AccessiblePeersCount { get; set; }
+    public List<NetbirdPeerGroup> Groups { get; set; } = [];
+    public DateTime CreatedAt { get; set; }
+}
+
+public class NetbirdPeerGroup
+{
+    public string Id { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
 }

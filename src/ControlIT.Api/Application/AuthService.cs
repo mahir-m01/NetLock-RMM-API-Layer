@@ -172,10 +172,8 @@ public sealed class AuthService : IAuthService
             CreatedAt = DateTime.UtcNow
         }, ct);
 
-        // Phase 2 SMTP is out of scope — log the token for the admin to retrieve.
-        _logger.LogInformation(
-            "[PASSWORD_RESET] Reset link for {Email}: /auth/reset-password?token={Token}",
-            email, rawToken);
+        _logger.LogInformation("[PASSWORD_RESET] Token generated for {Email}, hash prefix: {HashPrefix}",
+            email, hash[..8]);
     }
 
     public async Task ResetPasswordAsync(ResetPasswordRequest request, CancellationToken ct = default)

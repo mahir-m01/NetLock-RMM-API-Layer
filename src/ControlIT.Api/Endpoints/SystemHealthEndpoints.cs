@@ -5,6 +5,7 @@ using System.Reflection;
 using Dapper;
 using ControlIT.Api.Domain.DTOs.Responses;
 using ControlIT.Api.Domain.Interfaces;
+using Microsoft.Extensions.Caching.Memory;
 
 public static class SystemHealthEndpoints
 {
@@ -21,45 +22,53 @@ public static class SystemHealthEndpoints
             IEndpointProvider endpoint,
             INetbirdClient netbird,
             INetLockAdminClient netLockAdmin,
-            IWebHostEnvironment env) =>
+            IWebHostEnvironment env,
+            IMemoryCache cache) =>
         {
-            var mysql   = await CheckMysqlAsync(dbFactory);
-            var signalR = await CheckSignalRAsync(endpoint, netLockAdmin);
-            var netBird = await CheckNetBirdAsync(netbird);
-
-            var coreOk  = mysql.Status == "healthy" && signalR.Status == "healthy";
-            var overall = !coreOk ? "unhealthy"
-                        : netBird.Status != "healthy" ? "degraded"
-                        : "healthy";
-
-            var version = Assembly.GetExecutingAssembly()
-                              .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
-                              ?.InformationalVersion
-                          ?? Assembly.GetExecutingAssembly().GetName().Version?.ToString()
-                          ?? "unknown";
-
-            var uptime  = DateTime.UtcNow - _startedAt;
-            var uptimeStr = uptime.TotalHours >= 1
-                ? $"{(int)uptime.TotalHours}h {uptime.Minutes}m"
-                : $"{uptime.Minutes}m {uptime.Seconds}s";
-
-            return Results.Ok(new SystemHealthResponse
+            var result = await cache.GetOrCreateAsync("admin:system_health", async entry =>
             {
-                Status    = overall,
-                CheckedAt = DateTime.UtcNow,
-                Mysql     = mysql,
-                SignalR   = signalR,
-                NetBird   = netBird,
-                Api = new ApiInfo
+                entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(15);
+
+                var mysql = await CheckMysqlAsync(dbFactory);
+                var signalR = await CheckSignalRAsync(endpoint, netLockAdmin);
+                var netBird = await CheckNetBirdAsync(netbird);
+
+                var coreOk = mysql.Status == "healthy" && signalR.Status == "healthy";
+                var overall = !coreOk ? "unhealthy"
+                            : netBird.Status != "healthy" ? "degraded"
+                            : "healthy";
+
+                var version = Assembly.GetExecutingAssembly()
+                                  .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+                                  ?.InformationalVersion
+                              ?? Assembly.GetExecutingAssembly().GetName().Version?.ToString()
+                              ?? "unknown";
+
+                var uptime = DateTime.UtcNow - _startedAt;
+                var uptimeStr = uptime.TotalHours >= 1
+                    ? $"{(int)uptime.TotalHours}h {uptime.Minutes}m"
+                    : $"{uptime.Minutes}m {uptime.Seconds}s";
+
+                return new SystemHealthResponse
                 {
-                    Version          = version,
-                    Environment      = env.EnvironmentName,
-                    Uptime           = uptimeStr,
-                    ConnectedDevices = signalR.Detail?.StartsWith("connected=") == true
-                        ? int.TryParse(signalR.Detail.Split('=')[1], out var n) ? n : 0
-                        : 0,
-                },
+                    Status = overall,
+                    CheckedAt = DateTime.UtcNow,
+                    Mysql = mysql,
+                    SignalR = signalR,
+                    NetBird = netBird,
+                    Api = new ApiInfo
+                    {
+                        Version = version,
+                        Environment = env.EnvironmentName,
+                        Uptime = uptimeStr,
+                        ConnectedDevices = signalR.Detail?.StartsWith("connected=") == true
+                            ? int.TryParse(signalR.Detail.Split('=')[1], out var n) ? n : 0
+                            : 0,
+                    },
+                };
             });
+
+            return Results.Ok(result);
         }).RequireRateLimiting("api").RequireAuthorization("SuperAdminOnly");
     }
 
@@ -73,9 +82,9 @@ public static class SystemHealthEndpoints
             sw.Stop();
             return new ComponentHealth
             {
-                Status    = "healthy",
+                Status = "healthy",
                 LatencyMs = (int)sw.ElapsedMilliseconds,
-                Detail    = version,
+                Detail = version,
             };
         }
         catch (Exception ex)
@@ -97,9 +106,9 @@ public static class SystemHealthEndpoints
             sw.Stop();
             return new ComponentHealth
             {
-                Status    = "healthy",
+                Status = "healthy",
                 LatencyMs = (int)sw.ElapsedMilliseconds,
-                Detail    = $"connected={keys.Count()}",
+                Detail = $"connected={keys.Count()}",
             };
         }
         catch (Exception ex)
@@ -117,9 +126,9 @@ public static class SystemHealthEndpoints
             sw.Stop();
             return new ComponentHealth
             {
-                Status    = "healthy",
+                Status = "healthy",
                 LatencyMs = (int)sw.ElapsedMilliseconds,
-                Detail    = $"peers={peers.Count()}",
+                Detail = $"peers={peers.Count()}",
             };
         }
         catch (Exception ex)

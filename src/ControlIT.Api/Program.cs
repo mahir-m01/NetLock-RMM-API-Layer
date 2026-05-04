@@ -9,6 +9,7 @@
 //   5. Endpoint registration BEFORE await app.RunAsync()
 // ─────────────────────────────────────────────────────────────────────────────
 
+using System.Security.Claims;
 using System.Text;
 using System.Text.Json.Serialization;
 using Dapper;
@@ -25,6 +26,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.ResponseCompression;
 
 // ── P0 FIX — must be the absolute first statement in Program.cs ──────────────
 // Without this, every underscore-named column (device_name, last_access,
@@ -91,22 +93,34 @@ builder.Services.AddCors(options =>
 //   "api"      — 120 requests/min — general API usage
 //   "commands" — 20 requests/min  — command dispatch (stricter to prevent flooding)
 // Must be registered BEFORE var app = builder.Build().
+var apiPermitLimit = builder.Configuration.GetValue("RateLimiting:Api:PermitLimit", 120);
+var commandsPermitLimit = builder.Configuration.GetValue("RateLimiting:Commands:PermitLimit", 20);
+
 builder.Services.AddRateLimiter(options =>
 {
-    options.AddFixedWindowLimiter("api", limiterOptions =>
-    {
-        limiterOptions.Window = TimeSpan.FromMinutes(1);
-        limiterOptions.PermitLimit = 120;
-        limiterOptions.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-        limiterOptions.QueueLimit = 0;  // No queuing — reject immediately when over limit
-    });
+    options.AddPolicy("api", httpContext =>
+        RateLimitPartition.GetSlidingWindowLimiter(
+            partitionKey: $"api:{ResolveRateLimitActorKey(httpContext)}",
+            factory: _ => new SlidingWindowRateLimiterOptions
+            {
+                Window = TimeSpan.FromMinutes(1),
+                SegmentsPerWindow = 6,
+                PermitLimit = apiPermitLimit,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            }));
 
-    options.AddFixedWindowLimiter("commands", limiterOptions =>
-    {
-        limiterOptions.Window = TimeSpan.FromMinutes(1);
-        limiterOptions.PermitLimit = 20;
-        limiterOptions.QueueLimit = 0;
-    });
+    options.AddPolicy("commands", httpContext =>
+        RateLimitPartition.GetSlidingWindowLimiter(
+            partitionKey: $"commands:{ResolveRateLimitActorKey(httpContext)}",
+            factory: _ => new SlidingWindowRateLimiterOptions
+            {
+                Window = TimeSpan.FromMinutes(1),
+                SegmentsPerWindow = 6,
+                PermitLimit = commandsPermitLimit,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            }));
 
     // Return 429 Too Many Requests when rate limit is exceeded.
     options.RejectionStatusCode = 429;
@@ -123,6 +137,8 @@ builder.Services.Configure<ControlIT.Api.Common.Configuration.WazuhOptions>(
     builder.Configuration.GetSection("Wazuh"));
 builder.Services.Configure<ControlIT.Api.Common.Configuration.DatabaseOptions>(
     builder.Configuration.GetSection("Database"));
+builder.Services.Configure<ControlIT.Api.Common.Configuration.NetLockLiveBridgeOptions>(
+    builder.Configuration.GetSection("NetLockLiveBridge"));
 
 // ── HttpClient for NetLock admin API ─────────────────────────────────────
 // Named client "netlockadmin" — used by NetLockAdminClient to call
@@ -144,6 +160,7 @@ builder.Services.AddSingleton<IDbConnectionFactory, MySqlConnectionFactory>();
 builder.Services.AddScoped<IDeviceRepository, MySqlDeviceRepository>();
 builder.Services.AddScoped<IEventRepository, MySqlEventRepository>();
 builder.Services.AddScoped<ITenantRepository, MySqlTenantRepository>();
+builder.Services.AddScoped<INetbirdMappingRepository, NetbirdMappingRepository>();
 
 // ── Application — Scoped services ────────────────────────────────────────
 builder.Services.AddScoped<IAuditService, AuditService>();
@@ -154,13 +171,16 @@ builder.Services.AddScoped<AuditRepository>();
 
 builder.Services.AddScoped<IEndpointProvider, NetLockEndpointProvider>();
 builder.Services.AddScoped<ICommandDispatcher, SignalRCommandDispatcher>();
+builder.Services.AddSingleton<INetLockAdminSessionTokenProvider, NetLockAdminSessionTokenProvider>();
 
 // ── Application — Scoped: ControlItFacade MUST be Scoped, NOT Singleton ──
 // Registering ControlItFacade as Singleton creates a "captive dependency" bug:
 // it would capture the Scoped repositories from the FIRST request and reuse
 // them for ALL subsequent requests — causing tenant data leakage.
 builder.Services.AddScoped<ControlItFacade>();
+builder.Services.AddScoped<TenantNetworkService>();
 builder.Services.AddScoped<TenantContext>();
+builder.Services.AddSingleton<IPushEventPublisher, PushEventHub>();
 
 // NotificationFactory is an instance class so it can be injected and replaced in tests.
 builder.Services.AddScoped<NotificationFactory>();
@@ -174,6 +194,13 @@ builder.Services.AddSingleton<NetLockSignalRService>();
 // Resolves the existing Singleton instance rather than creating a second one,
 // which would produce two separate _pendingCommands dictionaries.
 builder.Services.AddHostedService(sp => sp.GetRequiredService<NetLockSignalRService>());
+if (!string.Equals(
+        Environment.GetEnvironmentVariable("CONTROLIT_DISABLE_NETLOCK_LIVE_BRIDGE"),
+        "true",
+        StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddHostedService<NetLockLiveBridge>();
+}
 
 // ── ISchemaValidator — Singleton ─────────────────────────────────────────
 // Singleton because: IDbConnectionFactory (Singleton) and IConfiguration (Singleton)
@@ -269,23 +296,63 @@ builder.Services.AddHostedService<BootstrapUserSeeder>();
 builder.Services.ConfigureHttpJsonOptions(o =>
     o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
+// ── Minimal API validation ─────────────────────────────────────────────────
+// Enforces DataAnnotations on Minimal API request DTOs before endpoint handlers.
+builder.Services.AddValidation();
+
 // ── Health checks ─────────────────────────────────────────────────────────
 builder.Services.AddHealthChecks();
+
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.MimeTypes = ResponseCompressionDefaults.MimeTypes.Concat(["application/json"]);
+});
+
+builder.Services.AddMemoryCache();
+
 
 // ── HTTP clients ──────────────────────────────────────────────────────────
 // IHttpClientFactory manages HttpClient lifetime and connection pooling,
 // preventing socket exhaustion from per-request HttpClient instantiation.
-builder.Services.AddHttpClient<INetbirdClient, ControlIT.Api.Infrastructure.Netbird.NetbirdApiClient>();
+builder.Services.AddHttpClient<INetbirdClient, ControlIT.Api.Infrastructure.Netbird.NetbirdApiClient>()
+    .AddStandardResilienceHandler(options =>
+    {
+        options.Retry.MaxRetryAttempts = 3;
+        options.Retry.Delay = TimeSpan.FromMilliseconds(500);
+        options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(30);
+        options.CircuitBreaker.FailureRatio = 0.5;
+        options.CircuitBreaker.MinimumThroughput = 5;
+        options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(10);
+        options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(30);
+    });
 
 // Named clients for notification channels.
 // NotificationFactory.Create() calls _httpFactory.CreateClient("teams") / ("webhook").
 builder.Services.AddHttpClient("teams");
 builder.Services.AddHttpClient("webhook");
 
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = 1_048_576;
+});
+
 // ── Build the application ────────────────────────────────────────────────
 var app = builder.Build();
 
 // ── Middleware pipeline — order is critical ───────────────────────────────────
+
+app.UseResponseCompression();
+
+app.Use(async (ctx, next) =>
+{
+    ctx.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    ctx.Response.Headers["X-Frame-Options"] = "DENY";
+    ctx.Response.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+    ctx.Response.Headers["X-XSS-Protection"] = "0";
+    ctx.Response.Headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'";
+    await next();
+});
 
 app.UseMiddleware<ErrorHandlingMiddleware>();     // 1. Catch all unhandled exceptions
 // WHY first: wraps the entire pipeline so any downstream exception returns a clean JSON error.
@@ -303,14 +370,26 @@ app.UseRateLimiter();                            // 5. Rate limiting after auth
 // WHY after auth: limits are applied per authenticated identity, not per IP.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ── Auto-apply EF migrations at startup (idempotent) ─────────────────────────
-// MigrateAsync() applies any pending EF migrations. Already-applied migrations
-// are skipped, so this is safe to run on every startup.
-// Must run BEFORE schema validation so EF creates controlit_* tables first.
-using (var scope = app.Services.CreateScope())
+// ── EF migrations ─────────────────────────────────────────────────────────────
+// Production runs with a least-privilege DB user, so schema migration is an
+// explicit one-time setup step using CONTROLIT_MIGRATE_ONLY=true and a privileged
+// connection string. Development keeps auto-migration for local/test ergonomics.
+var migrateOnly = IsEnabled(Environment.GetEnvironmentVariable("CONTROLIT_MIGRATE_ONLY"));
+var shouldAutoMigrate = migrateOnly
+    || app.Environment.IsDevelopment()
+    || IsEnabled(Environment.GetEnvironmentVariable("CONTROLIT_AUTO_MIGRATE"));
+
+if (shouldAutoMigrate)
 {
+    using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<ControlItDbContext>();
     await db.Database.MigrateAsync();
+}
+
+if (migrateOnly)
+{
+    app.Logger.LogInformation("ControlIT migrations applied. Exiting because CONTROLIT_MIGRATE_ONLY=true.");
+    return;
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -329,6 +408,23 @@ using (var scope = app.Services.CreateScope())
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ── Bootstrap user sync ──────────────────────────────────────────────────────
+// Normal startup only creates a bootstrap admin when no ControlIT users exist.
+// Install flow can opt into one-time sync so printed setup credentials stay true
+// when reinstalling over an existing controlit_users table.
+{
+    var logger = app.Services.GetRequiredService<ILogger<BootstrapUserSeeder>>();
+    var forceSync = IsEnabled(Environment.GetEnvironmentVariable("CONTROLIT_SYNC_BOOTSTRAP_USER"));
+    await BootstrapUserSeeder.SeedAsync(app.Services, logger, forceSync, CancellationToken.None);
+}
+
+if (IsEnabled(Environment.GetEnvironmentVariable("CONTROLIT_BOOTSTRAP_SYNC_ONLY")))
+{
+    app.Logger.LogInformation("ControlIT bootstrap user synced. Exiting because CONTROLIT_BOOTSTRAP_SYNC_ONLY=true.");
+    return;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 // ── Endpoint registration ─────────────────────────────────────────────────────
 // Each group registers its routes via its static Map(app) method.
 // This Minimal API pattern is lighter than MVC controllers and avoids
@@ -343,7 +439,29 @@ DashboardEndpoints.Map(app);
 AuditEndpoints.Map(app);
 HealthEndpoints.Map(app);
 SystemHealthEndpoints.Map(app);
+NetworkEndpoints.Map(app);
 IntegrationEndpoints.Map(app);
 // ─────────────────────────────────────────────────────────────────────────────
 
 await app.RunAsync();
+
+static string ResolveRateLimitActorKey(HttpContext context)
+{
+    if (context.User.Identity?.IsAuthenticated == true)
+    {
+        var actorId = context.User.FindFirstValue("sub")
+            ?? context.User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        if (!string.IsNullOrWhiteSpace(actorId))
+            return $"user:{actorId}";
+    }
+
+    var remoteIp = context.Connection.RemoteIpAddress?.ToString();
+    return $"ip:{remoteIp ?? "unknown"}";
+}
+
+static bool IsEnabled(string? value) =>
+    value is not null
+    && (string.Equals(value, "true", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(value, "1", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(value, "yes", StringComparison.OrdinalIgnoreCase));

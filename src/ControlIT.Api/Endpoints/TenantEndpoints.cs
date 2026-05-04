@@ -1,42 +1,37 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// TenantEndpoints.cs
-// Registers tenant and location management endpoints.
-//
-// Note: These endpoints are admin-level — they list ALL tenants, not just
-// the tenant associated with the API key. In Phase 1 this is acceptable
-// because we have a single tenant. Phase 2 will add role-based auth to
-// restrict tenant listing to users with an "admin" role.
-// ─────────────────────────────────────────────────────────────────────────────
 namespace ControlIT.Api.Endpoints;
 
+using ControlIT.Api.Application;
 using ControlIT.Api.Domain.Interfaces;
 
 public static class TenantEndpoints
 {
     public static void Map(WebApplication app)
     {
-        // GET /tenants — list all tenants.
-        // Admin only — Phase 1 does not enforce role distinctions.
-        // Phase 2: add role check when JWT auth is introduced.
-        app.MapGet("/tenants", async (ITenantRepository repo) =>
+        app.MapGet("/tenants", async (ITenantRepository repo, TenantContext tenant) =>
         {
-            var tenants = await repo.GetAllAsync();
-            return Results.Ok(tenants);
+            if (tenant.IsAllTenants)
+                return Results.Ok(await repo.GetAllAsync());
+
+            var single = await repo.GetByIdAsync(tenant.TenantId!.Value);
+            return single is null
+                ? Results.Ok(Array.Empty<object>())
+                : Results.Ok(new[] { single });
         }).RequireRateLimiting("api").RequireAuthorization("TenantMember");
 
-        // GET /tenants/{id} — get a specific tenant with its locations.
-        // Uses QueryMultipleAsync internally for one DB round-trip.
-        app.MapGet("/tenants/{id:int}", async (int id, ITenantRepository repo) =>
+        app.MapGet("/tenants/{id:int}", async (int id, ITenantRepository repo, TenantContext tenant) =>
         {
-            var tenant = await repo.GetByIdAsync(id);
-            return tenant is null ? Results.NotFound() : Results.Ok(tenant);
+            if (!tenant.IsAllTenants && tenant.TenantId != id)
+                return Results.Forbid();
+
+            var result = await repo.GetByIdAsync(id);
+            return result is null ? Results.NotFound() : Results.Ok(result);
         }).RequireRateLimiting("api").RequireAuthorization("TenantMember");
 
-        // GET /tenants/{id}/locations — locations for a specific tenant.
-        // Separate endpoint so the dashboard can load locations without the full tenant.
-        app.MapGet("/tenants/{id:int}/locations", async (
-            int id, ITenantRepository repo) =>
+        app.MapGet("/tenants/{id:int}/locations", async (int id, ITenantRepository repo, TenantContext tenant) =>
         {
+            if (!tenant.IsAllTenants && tenant.TenantId != id)
+                return Results.Forbid();
+
             var locations = await repo.GetLocationsByTenantAsync(id);
             return Results.Ok(locations);
         }).RequireRateLimiting("api").RequireAuthorization("TenantMember");

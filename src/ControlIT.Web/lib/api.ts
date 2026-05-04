@@ -8,6 +8,8 @@ import type {
   EventsResponse,
   Tenant,
   AuditLog,
+  BatchCommandRequest,
+  BatchCommandResponse,
   ExecuteCommandRequest,
   ExecuteCommandResponse,
   DeviceFilters,
@@ -17,9 +19,18 @@ import type {
   CreateUserRequest,
   CreateUserResponse,
   ChangePasswordRequest,
+  NetbirdPeer,
+  NetbirdSetupKey,
+  NetbirdSetupKeyCreateResponse,
+  NetbirdPolicy,
+  NetbirdRoute,
+  NetbirdGroup,
+  NetworkSummary,
+  CreateSetupKeyApiRequest,
+  BindTenantGroupRequest,
 } from "./types";
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5290";
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5290";
 
 let _onUnauthenticated: (() => void) | null = null;
 
@@ -45,7 +56,7 @@ async function doFetch(path: string, options: RequestInit = {}): Promise<Respons
   };
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
-  return fetch(`${BASE_URL}${path}`, {
+  return fetch(`${API_BASE_URL}${path}`, {
     ...options,
     headers,
     credentials: "include", // always include — needed for refresh cookie
@@ -54,7 +65,7 @@ async function doFetch(path: string, options: RequestInit = {}): Promise<Respons
 
 async function tryRefresh(): Promise<boolean> {
   try {
-    const res = await fetch(`${BASE_URL}/auth/refresh`, {
+    const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -98,7 +109,7 @@ async function request<T>(path: string, options: RequestInit = {}, skipAuth = fa
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
 export async function loginUser(req: LoginRequest): Promise<LoginResponse> {
-  const res = await fetch(`${BASE_URL}/auth/login`, {
+  const res = await fetch(`${API_BASE_URL}/auth/login`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -120,7 +131,7 @@ export async function logoutUser(): Promise<void> {
 
 export async function refreshTokenFromCookie(): Promise<LoginResponse | null> {
   try {
-    const res = await fetch(`${BASE_URL}/auth/refresh`, {
+    const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -188,7 +199,7 @@ export async function getDevices(
     pageSize: String(pageSize),
   });
   if (filters?.platform) params.set("platform", filters.platform);
-  if (filters?.search) params.set("search", filters.search);
+  if (filters?.search) params.set("searchTerm", filters.search);
   return request<DevicesResponse>(`/devices?${params.toString()}`);
 }
 
@@ -233,4 +244,71 @@ export async function executeCommand(
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export async function executeBatchCommand(
+  payload: BatchCommandRequest
+): Promise<BatchCommandResponse> {
+  return request<BatchCommandResponse>("/commands/batch", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+// ─── Network ────────────────────────────────────────────────────────────────
+
+export async function getNetworkPeers(targetTenantId?: number): Promise<NetbirdPeer[]> {
+  const qs = targetTenantId !== undefined ? `?targetTenantId=${targetTenantId}` : "";
+  return request<NetbirdPeer[]>(`/network/peers${qs}`);
+}
+
+export async function getNetworkGroups(): Promise<NetbirdGroup[]> {
+  return request<NetbirdGroup[]>("/network/groups");
+}
+
+export async function bindTenantGroup(
+  req: BindTenantGroupRequest,
+  targetTenantId?: number
+): Promise<void> {
+  const qs = targetTenantId !== undefined ? `?targetTenantId=${targetTenantId}` : "";
+  await request<unknown>(`/network/tenant-group${qs}`, {
+    method: "POST",
+    body: JSON.stringify(req),
+  });
+}
+
+export async function getNetworkSummary(targetTenantId?: number): Promise<NetworkSummary> {
+  const qs = targetTenantId !== undefined ? `?targetTenantId=${targetTenantId}` : "";
+  return request<NetworkSummary>(`/network/summary${qs}`);
+}
+
+export async function getSetupKeys(targetTenantId?: number): Promise<NetbirdSetupKey[]> {
+  const qs = targetTenantId !== undefined ? `?targetTenantId=${targetTenantId}` : "";
+  return request<NetbirdSetupKey[]>(`/network/setup-keys${qs}`);
+}
+
+export async function createSetupKey(req: CreateSetupKeyApiRequest, targetTenantId?: number): Promise<NetbirdSetupKeyCreateResponse> {
+  const qs = targetTenantId !== undefined ? `?targetTenantId=${targetTenantId}` : "";
+  return request<NetbirdSetupKeyCreateResponse>(`/network/setup-keys${qs}`, {
+    method: "POST",
+    body: JSON.stringify(req),
+  });
+}
+
+export async function deleteSetupKey(id: string, targetTenantId?: number): Promise<void> {
+  const qs = targetTenantId !== undefined ? `?targetTenantId=${targetTenantId}` : "";
+  return request<void>(`/network/setup-keys/${id}${qs}`, { method: "DELETE" });
+}
+
+export async function getNetworkRoutes(): Promise<NetbirdRoute[]> {
+  return request<NetbirdRoute[]>("/network/routes");
+}
+
+export async function getNetworkPolicies(): Promise<NetbirdPolicy[]> {
+  return request<NetbirdPolicy[]>("/network/policies");
+}
+
+export async function deletePeer(peerId: string, targetTenantId?: number): Promise<void> {
+  const qs = targetTenantId !== undefined ? `?targetTenantId=${targetTenantId}` : "";
+  return request<void>(`/network/peer/${peerId}${qs}`, { method: "DELETE" });
 }

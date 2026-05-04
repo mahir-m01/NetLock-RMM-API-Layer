@@ -30,7 +30,7 @@ describe("DevicesPage", () => {
     mockUseQuery.mockReturnValue({
       data: {
         items: [
-          { id: 27, deviceName: "test-device", platform: "Linux", status: "online" },
+          { id: 27, deviceName: "test-device", platform: "Linux", isOnline: true, netbirdIp: "100.64.0.8" },
         ],
         totalCount: 1,
         page: 1,
@@ -41,6 +41,26 @@ describe("DevicesPage", () => {
     });
     render(<DevicesPage />);
     expect(screen.getByText("test-device")).toBeInTheDocument();
+    expect(screen.getByText("100.64.0.8")).toBeInTheDocument();
+  });
+
+  it("renders concise NetBird not linked state", () => {
+    mockUseQuery.mockReturnValue({
+      data: {
+        items: [
+          { id: 28, deviceName: "unlinked-device", platform: "Windows", isOnline: false, netbirdIp: null },
+        ],
+        totalCount: 1,
+        page: 1,
+        pageSize: 10,
+      },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<DevicesPage />);
+
+    expect(screen.getByText("NetBird not linked")).toBeInTheDocument();
   });
 
   it("renders 'No devices found' when items array is empty", () => {

@@ -10,6 +10,8 @@
 
 namespace ControlIT.Api.Domain.Interfaces;
 
+using ControlIT.Api.Domain.Models;
+
 public interface INetLockAdminClient
 {
     /// <summary>
@@ -18,4 +20,11 @@ public interface INetLockAdminClient
     /// A device is online iff its access_key is in this set.
     /// </summary>
     Task<IReadOnlySet<string>> GetConnectedAccessKeysAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns a fresh live snapshot plus degraded status for push bridge health.
+    /// Access keys stay internal and must never be serialized to clients.
+    /// </summary>
+    Task<NetLockConnectedDevicesSnapshot> GetConnectedDevicesSnapshotAsync(
+        CancellationToken ct = default);
 }

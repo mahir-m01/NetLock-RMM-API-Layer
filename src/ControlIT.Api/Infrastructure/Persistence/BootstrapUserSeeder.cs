@@ -18,20 +18,50 @@ public sealed class BootstrapUserSeeder : IHostedService
     }
 
     public async Task StartAsync(CancellationToken ct)
+        => await SeedAsync(_services, _logger, forceSync: false, ct);
+
+    public static async Task SeedAsync(
+        IServiceProvider services,
+        ILogger logger,
+        bool forceSync,
+        CancellationToken ct)
     {
-        await using var scope = _services.CreateAsyncScope();
+        await using var scope = services.CreateAsyncScope();
         var users = scope.ServiceProvider.GetRequiredService<IUserRepository>();
         var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
-
-        if (await users.AnyExistsAsync(ct)) return;
 
         var email = Environment.GetEnvironmentVariable("CONTROLIT_BOOTSTRAP_EMAIL")
                     ?? "admin@controlit.local";
         var password = Environment.GetEnvironmentVariable("CONTROLIT_BOOTSTRAP_PASSWORD");
+        var existing = await users.GetByEmailAsync(email, ct);
+
+        if (existing is not null)
+        {
+            if (!forceSync) return;
+
+            if (string.IsNullOrWhiteSpace(password))
+                throw new InvalidOperationException("CONTROLIT_BOOTSTRAP_PASSWORD is required to sync bootstrap user.");
+
+            existing.PasswordHash = hasher.Hash(password);
+            existing.Role = Role.SuperAdmin;
+            existing.IsActive = true;
+            existing.MustChangePassword = true;
+            existing.FailedLoginCount = 0;
+            existing.LockedUntil = null;
+            existing.PasswordChangedAt = DateTime.UtcNow;
+            await users.UpdateAsync(existing, ct);
+
+            logger.LogInformation(
+                "Bootstrap SuperAdmin synced: {Email}. Must change password on next login.",
+                email);
+            return;
+        }
+
+        if (await users.AnyExistsAsync(ct) && !forceSync) return;
 
         if (string.IsNullOrWhiteSpace(password))
         {
-            _logger.LogCritical(
+            logger.LogCritical(
                 "No users exist and CONTROLIT_BOOTSTRAP_PASSWORD is not set. " +
                 "Set this environment variable and restart.");
             throw new InvalidOperationException("CONTROLIT_BOOTSTRAP_PASSWORD is required for first-run setup.");
@@ -49,7 +79,7 @@ public sealed class BootstrapUserSeeder : IHostedService
 
         await users.CreateAsync(user, ct);
 
-        _logger.LogInformation(
+        logger.LogInformation(
             "Bootstrap SuperAdmin created: {Email}. Must change password on first login.",
             email);
     }

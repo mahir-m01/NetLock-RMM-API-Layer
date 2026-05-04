@@ -84,6 +84,10 @@ export interface Device {
   ramUsage: number | null;
   isOnline: boolean;
   lastAccess: string;
+  netbirdIp?: string | null;
+  netBirdIp?: string | null;
+  netbirdPeerId?: string | null;
+  netBirdPeerId?: string | null;
 }
 
 export interface DevicesResponse {
@@ -156,6 +160,28 @@ export interface ExecuteCommandResponse {
   [key: string]: unknown;
 }
 
+export interface BatchCommandRequest {
+  deviceIds: number[];
+  command: string;
+  shell: Shell;
+  timeoutSeconds: number;
+}
+
+export interface BatchCommandResult {
+  deviceId: number;
+  status: "SUCCESS" | "TIMEOUT" | "FAILURE" | string;
+  message: string;
+  output?: string;
+  executedAt?: string;
+}
+
+export interface BatchCommandResponse {
+  requestedCount: number;
+  successCount: number;
+  failureCount: number;
+  results: BatchCommandResult[];
+}
+
 // ─── System Health ───────────────────────────────────────────────────────────
 
 export interface ComponentHealth {
@@ -188,4 +214,106 @@ export interface PaginationParams {
 export interface DeviceFilters {
   platform?: string;
   search?: string;
+}
+
+// ─── Netbird Network ────────────────────────────────────────────────────────
+
+export interface NetbirdPeer {
+  id: string;
+  name: string;
+  ip: string;
+  os: string;
+  connected: boolean;
+  lastSeen: string;
+  hostname: string;
+  dnsLabel: string;
+  version: string;
+  countryCode: string;
+  cityName: string;
+  connectionIp: string;
+  sshEnabled: boolean;
+  loginExpired: boolean;
+  accessiblePeersCount: number;
+  groups: { id: string; name: string }[];
+  createdAt: string;
+}
+
+export interface NetbirdGroup {
+  id: string;
+  name: string;
+  peersCount: number;
+  resourcesCount: number;
+  issued: string;
+  peers: { id: string; name: string }[];
+}
+
+export interface NetbirdSetupKey {
+  id: string;
+  name: string;
+  key: string;
+  type: "one-off" | "reusable";
+  valid: boolean;
+  revoked: boolean;
+  usedTimes: number;
+  usageLimit: number;
+  expires: string;
+  autoGroups: string[];
+  ephemeral: boolean;
+  state: string;
+}
+
+// Returned only by POST /network/setup-keys. key is raw and shown once; never from list endpoints.
+export type NetbirdSetupKeyCreateResponse = NetbirdSetupKey;
+
+export interface NetbirdPolicy {
+  id: string;
+  name: string;
+  description: string;
+  enabled: boolean;
+  rules: {
+    name: string;
+    action: string;
+    bidirectional: boolean;
+    protocol: string;
+    sources: string[];
+    destinations: string[];
+    ports: string[];
+  }[];
+}
+
+export interface NetbirdRoute {
+  id: string;
+  description: string;
+  networkId: string;
+  network: string;
+  networkType: string;
+  enabled: boolean;
+  peer: string;
+  metric: number;
+  masquerade: boolean;
+  groups: string[];
+}
+
+export interface NetworkSummary {
+  totalPeers: number;
+  connectedPeers: number;
+  tenantPeers: number;
+  tenantConnectedPeers: number;
+  setupKeysActive: number;
+  routeCount: number;
+}
+
+export interface CreateSetupKeyApiRequest {
+  name: string;
+  type: "one-off" | "reusable";
+  expiresInDays: number;
+  usageLimit: number;
+  ephemeral: boolean;
+}
+
+export type TenantNetbirdGroupMode = "external" | "read_only";
+
+export interface BindTenantGroupRequest {
+  groupId: string;
+  mode: TenantNetbirdGroupMode;
 }

@@ -38,12 +38,13 @@ public class NetLockSignalRService : IHostedService, IAsyncDisposable
     private readonly IDbConnectionFactory _factory;
     private readonly ILogger<NetLockSignalRService> _logger;
     private readonly ISchemaValidator _schemaValidator;
+    private readonly INetLockAdminSessionTokenProvider _tokenProvider;
 
     // Created in StartAsync. Nullable because it does not exist until StartAsync runs.
     private HubConnection? _connection;
 
     /// <summary>
-    /// device_id (int PK as string) → TaskCompletionSource.
+    /// device_id (int PK as string) → PendingCommand (TCS + creation timestamp).
     ///
     /// P0 KEY RULE: Keyed by device_id — NOT by deviceAccessKey, NOT by responseId.
     /// NetLock's callback format: "device_id>>nlocksep<<output" (plain string, not JSON).
@@ -54,8 +55,13 @@ public class NetLockSignalRService : IHostedService, IAsyncDisposable
     /// - HTTP request handlers run on different threads
     /// - We need thread-safe add/remove without explicit locking
     /// </summary>
-    private readonly ConcurrentDictionary<string, TaskCompletionSource<string>>
+    private readonly record struct PendingCommand(
+        TaskCompletionSource<string> Tcs, DateTime CreatedAt);
+
+    private readonly ConcurrentDictionary<string, PendingCommand>
         _pendingCommands = new();
+
+    private Timer? _cleanupTimer;
 
     // Checked by IEndpointProvider.IsConnected before every dispatch.
     public bool IsConnected =>
@@ -65,12 +71,14 @@ public class NetLockSignalRService : IHostedService, IAsyncDisposable
         IOptions<NetLockOptions> options,
         IDbConnectionFactory factory,
         ILogger<NetLockSignalRService> logger,
-        ISchemaValidator schemaValidator)
+        ISchemaValidator schemaValidator,
+        INetLockAdminSessionTokenProvider tokenProvider)
     {
         _options = options.Value;
         _factory = factory;
         _logger = logger;
         _schemaValidator = schemaValidator;
+        _tokenProvider = tokenProvider;
     }
 
     // ── IHostedService ────────────────────────────────────────────────────────
@@ -80,6 +88,7 @@ public class NetLockSignalRService : IHostedService, IAsyncDisposable
         // Validate the NetLock DB schema before opening the SignalR connection.
         // Throws if any required column is missing, preventing the host from starting.
         await _schemaValidator.ValidateRequiredColumnsAsync(cancellationToken);
+        var adminToken = await _tokenProvider.GetTokenAsync(cancellationToken);
 
         // Build the HubConnection — configures the URL, auth header, and retry policy.
         _connection = new HubConnectionBuilder()
@@ -89,9 +98,8 @@ public class NetLockSignalRService : IHostedService, IAsyncDisposable
                 // which has the shape: { "admin_identity": { "token": "<value>" } }
                 // The header value must be URL-encoded. Sending only {"token":"..."} at the
                 // top level causes rootData.admin_identity to be null — auth fails silently.
-                // SECURITY: never log _options.AdminSessionToken — it grants full admin access.
-                options.Headers["Admin-Identity"] =
-                    Uri.EscapeDataString($"{{\"admin_identity\":{{\"token\":\"{_options.AdminSessionToken}\"}}}}");
+                // SECURITY: never log the token — it grants full admin access.
+                options.Headers["Admin-Identity"] = BuildAdminIdentityHeaderValue(adminToken);
             })
             // InfiniteRetryPolicy ensures reconnects are retried forever with exponential backoff.
             .WithAutomaticReconnect(new InfiniteRetryPolicy())
@@ -104,10 +112,10 @@ public class NetLockSignalRService : IHostedService, IAsyncDisposable
         {
             var parts = result.Split(">>nlocksep<<", 2);
 
-            if (parts.Length == 2 && _pendingCommands.TryRemove(parts[0], out var tcs))
+            if (parts.Length == 2 && _pendingCommands.TryRemove(parts[0], out var pending))
             {
                 // parts[0] = device_id, parts[1] = output text
-                tcs.TrySetResult(parts[1]);
+                pending.Tcs.TrySetResult(parts[1]);
             }
             else
             {
@@ -151,14 +159,36 @@ public class NetLockSignalRService : IHostedService, IAsyncDisposable
             // TryRemove is used because a TTL expiry may fire concurrently on the same entry.
             foreach (var kvp in _pendingCommands)
             {
-                if (_pendingCommands.TryRemove(kvp.Key, out var tcs))
-                    tcs.TrySetCanceled();
+                if (_pendingCommands.TryRemove(kvp.Key, out var pending))
+                    pending.Tcs.TrySetCanceled();
             }
 
             return Task.CompletedTask;
         };
 
-        await _connection.StartAsync(cancellationToken);
+        try
+        {
+            await _connection.StartAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogCritical(ex,
+                "NetLock commandHub connection failed during startup. API will continue; command dispatch remains unavailable until the hub connection is restored.");
+            return;
+        }
+
+        _cleanupTimer = new Timer(_ =>
+        {
+            var cutoff = DateTime.UtcNow.AddMinutes(-2);
+            foreach (var kvp in _pendingCommands)
+            {
+                if (kvp.Value.CreatedAt < cutoff && _pendingCommands.TryRemove(kvp.Key, out var cmd))
+                {
+                    cmd.Tcs.TrySetCanceled();
+                    _logger.LogWarning("Cleaned up stale pending command for device {DeviceId}", kvp.Key);
+                }
+            }
+        }, null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
 
         // SECURITY: only log the URL, never the token.
         _logger.LogInformation("Connected to NetLock commandHub at {Url}", _options.HubUrl);
@@ -200,19 +230,14 @@ public class NetLockSignalRService : IHostedService, IAsyncDisposable
         // registered under device_id to be found when the response arrives.
         var deviceIdStr = await LookupDeviceIdAsync(deviceAccessKey);
 
-        // Step 2: Enforce one-pending-command-per-device.
-        // ContainsKey is a best-effort pre-check; the actual enforcement is the TryAdd below.
-        if (_pendingCommands.ContainsKey(deviceIdStr))
-            throw new InvalidOperationException(
-                $"A command is already pending for device {deviceAccessKey}. Wait for it to complete or time out.");
-
-        // Step 3: Create the TaskCompletionSource that carries the response back.
-        // RunContinuationsAsynchronously prevents the continuation from running on the
-        // SignalR receive thread, which would risk deadlocks.
         var tcs = new TaskCompletionSource<string>(
             TaskCreationOptions.RunContinuationsAsynchronously);
+        var pending = new PendingCommand(tcs, DateTime.UtcNow);
 
-        // Step 4: Register TTL cleanup to prevent a memory leak if the device never responds.
+        if (!_pendingCommands.TryAdd(deviceIdStr, pending))
+            throw new InvalidOperationException(
+                $"A command is already pending for device {deviceIdStr}. Wait for completion or timeout.");
+
         using var cts = new CancellationTokenSource(timeout);
         cts.Token.Register(() =>
         {
@@ -220,13 +245,11 @@ public class NetLockSignalRService : IHostedService, IAsyncDisposable
             tcs.TrySetCanceled();
         });
 
-        // Register the TCS under device_id — the response handler looks it up here.
-        _pendingCommands[deviceIdStr] = tcs;
-
         try
         {
             // Step 5: Build and send the command to the NetLock hub.
-            var payload = BuildRootEntity(deviceAccessKey, commandJson);
+            var adminToken = await _tokenProvider.GetTokenAsync();
+            var payload = BuildRootEntity(deviceAccessKey, commandJson, adminToken);
             // NetLock expects the payload URL-encoded.
             var encoded = Uri.EscapeDataString(JsonSerializer.Serialize(payload));
 
@@ -244,7 +267,7 @@ public class NetLockSignalRService : IHostedService, IAsyncDisposable
             // CancellationToken fired — timeout exceeded.
             _pendingCommands.TryRemove(deviceIdStr, out _);
             throw new TimeoutException(
-                $"Command timed out after {timeout.TotalSeconds}s. Device: {deviceAccessKey}");
+                $"Command timed out after {timeout.TotalSeconds}s. Device: {deviceIdStr}");
         }
         catch
         {
@@ -258,15 +281,28 @@ public class NetLockSignalRService : IHostedService, IAsyncDisposable
 
     // Builds the root JSON payload for NetLock's MessageReceivedFromWebconsole.
     // Format: { admin_identity: { token }, target_device: { access_key }, command: {...} }
-    private object BuildRootEntity(string deviceAccessKey, string commandJson)
+    public static string BuildAdminIdentityHeaderValue(string adminToken)
+    {
+        var envelope = JsonSerializer.Serialize(new
+        {
+            admin_identity = new { token = adminToken }
+        });
+
+        return Uri.EscapeDataString(envelope);
+    }
+
+    private static object BuildRootEntity(
+        string deviceAccessKey,
+        string commandJson,
+        string adminToken)
     {
         // Deserialise commandJson to JsonElement to avoid double-serialisation.
         var cmd = JsonSerializer.Deserialize<JsonElement>(commandJson);
         return new
         {
-            admin_identity = new { token = _options.AdminSessionToken },
-            target_device  = new { access_key = deviceAccessKey },
-            command        = cmd
+            admin_identity = new { token = adminToken },
+            target_device = new { access_key = deviceAccessKey },
+            command = cmd
         };
     }
 
@@ -281,7 +317,7 @@ public class NetLockSignalRService : IHostedService, IAsyncDisposable
 
         if (id is null)
             throw new InvalidOperationException(
-                $"Device not found for access_key: {accessKey}");
+                $"Device not found for access_key: {accessKey[..Math.Min(4, accessKey.Length)]}****");
 
         return id.Value.ToString(); // _pendingCommands is keyed by string
     }
@@ -293,9 +329,10 @@ public class NetLockSignalRService : IHostedService, IAsyncDisposable
         try
         {
             using var conn = await _factory.CreateConnectionAsync(cancellationToken);
+            var adminToken = await _tokenProvider.GetTokenAsync(cancellationToken);
             var count = await conn.ExecuteScalarAsync<int>(
                 "SELECT COUNT(*) FROM accounts WHERE remote_session_token = @token",
-                new { token = _options.AdminSessionToken });
+                new { token = adminToken });
             return count > 0;
         }
         catch (Exception ex)
@@ -310,6 +347,7 @@ public class NetLockSignalRService : IHostedService, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        _cleanupTimer?.Dispose();
         if (_connection is not null)
             await _connection.DisposeAsync();
     }

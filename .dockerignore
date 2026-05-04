@@ -1,25 +1,59 @@
-# Node
-src/ControlIT.Web/node_modules
-src/ControlIT.Web/.next
+# VCS, agent context, and local tooling
+.git/
+.gitignore
+graphify-out/
+.ai-workflow/
+.claude/
+.codex/
+.firecrawl/
 
-# .NET build output
-src/ControlIT.Api/bin
-src/ControlIT.Api/obj
-tests/*/bin
-tests/*/obj
+# Runtime/vendor data is not copied by Dockerfile or Dockerfile.web.
+data/
 
-# Docker
-Dockerfile*
-docker-compose.yml
+# Node and Next.js build output
+**/node_modules/
+**/.next/
+**/.turbo/
+**/out/
+**/dist/
+**/coverage/
+**/tsconfig.tsbuildinfo
+
+# .NET build and test output
+**/bin/
+**/obj/
+**/TestResults/
+**/*.trx
+**/*.coverage
+**/*.coveragexml
+**/coverage.cobertura.xml
+
+# Temporary, decompiled, and log output
+**/logs/
+**/*.log
+**/tmp/
+**/temp/
+**/.tmp/
+**/decomp/
+**/decompiled/
+**/decomp*/
+*.tmp
+*.bak
+*.swp
 
 # Secrets and local config
 .env
 .env.*
+!.env.example
 src/ControlIT.Api/Properties/launchSettings.json
+src/ControlIT.Web/.env*
 
-# Git
-.git
-.gitignore
-
-# macOS
+# IDE and OS files
 .DS_Store
+**/.DS_Store
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates

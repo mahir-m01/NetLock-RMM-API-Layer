@@ -9,13 +9,20 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: "http://+:5290"
       # Connects to the NetLock MySQL container via its static IP on the shared network.
-      # MYSQL_DATABASE and MYSQL_ROOT_PASSWORD come from .env (same file NetLock uses).
-      CONTROLIT_DB_CONNECTION: "Server=172.18.0.3;Port=3306;Database=${MYSQL_DATABASE};User=root;Password=${MYSQL_ROOT_PASSWORD};"
+      # Uses a dedicated least-privilege user instead of root.
+      # See scripts/init-controlit-db-user.sql to create the user.
+      CONTROLIT_DB_CONNECTION: "Server=172.18.0.3;Port=3306;Database=${MYSQL_DATABASE};User=${CONTROLIT_DB_USER:-controlit_api};Password=${CONTROLIT_DB_PASSWORD};"
       Database__Name: "${MYSQL_DATABASE}"
       CONTROLIT_JWT_SIGNING_KEY: "${CONTROLIT_JWT_SIGNING_KEY}"
       CONTROLIT_BOOTSTRAP_EMAIL: "${CONTROLIT_BOOTSTRAP_EMAIL}"
       CONTROLIT_BOOTSTRAP_PASSWORD: "${CONTROLIT_BOOTSTRAP_PASSWORD}"
       CONTROLIT_NETLOCK_TOKEN: "${CONTROLIT_NETLOCK_TOKEN}"
+      CONTROLIT_NETLOCK_FILES_KEY: "${CONTROLIT_NETLOCK_FILES_KEY}"
+      # Production/demo runtime uses least-privilege DB user; run migrations once with root/migration user first.
+      CONTROLIT_AUTO_MIGRATE: "${CONTROLIT_AUTO_MIGRATE:-false}"
+      NetLock__HubUrl: "http://netlock-rmm-server:7080/commandHub"
+      Netbird__BaseUrl: "${NETBIRD_BASE_URL:-https://your-netbird-management-server}"
+      Netbird__Token: "${NETBIRD_TOKEN:-REPLACE_WITH_NETBIRD_PAT}"
       Cors__AllowedOrigins: "http://localhost:3000"
     ports:
       - "5290:5290"
@@ -47,4 +54,5 @@ services:
 networks:
   # Reference the network NetLock already created — do not recreate it.
   netlock-network:
+    name: netlock-rmm-api-layer_netlock-network
     external: true

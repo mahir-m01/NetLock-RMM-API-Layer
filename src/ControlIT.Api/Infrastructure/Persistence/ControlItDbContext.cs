@@ -25,6 +25,8 @@ public class ControlItDbContext : DbContext
     public DbSet<ControlItUser> Users => Set<ControlItUser>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
+    public DbSet<DeviceNetbirdMap> DeviceNetbirdMaps => Set<DeviceNetbirdMap>();
+    public DbSet<TenantNetbirdGroup> TenantNetbirdGroups => Set<TenantNetbirdGroup>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -104,6 +106,38 @@ public class ControlItDbContext : DbContext
                   .WithMany()
                   .HasForeignKey(e => e.UserId)
                   .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<DeviceNetbirdMap>(entity =>
+        {
+            entity.ToTable("controlit_device_netbird_map");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id").ValueGeneratedOnAdd();
+            entity.Property(e => e.DeviceId).HasColumnName("device_id");
+            entity.Property(e => e.NetbirdPeerId).HasColumnName("netbird_peer_id").HasMaxLength(255);
+            entity.Property(e => e.NetbirdIp).HasColumnName("netbird_ip").HasMaxLength(45);
+            entity.Property(e => e.NetbirdHostname).HasColumnName("netbird_hostname").HasMaxLength(255);
+            entity.Property(e => e.MappedAt).HasColumnName("mapped_at");
+            entity.Property(e => e.MappedBy).HasColumnName("mapped_by").HasMaxLength(255);
+            entity.HasIndex(e => e.DeviceId).IsUnique().HasDatabaseName("idx_device_netbird_device");
+            entity.HasIndex(e => e.NetbirdPeerId).IsUnique().HasDatabaseName("idx_device_netbird_peer");
+        });
+
+        modelBuilder.Entity<TenantNetbirdGroup>(entity =>
+        {
+            entity.ToTable("controlit_tenant_netbird_group");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id").ValueGeneratedOnAdd();
+            entity.Property(e => e.TenantId).HasColumnName("tenant_id");
+            entity.Property(e => e.NetbirdGroupId).HasColumnName("netbird_group_id").HasMaxLength(255);
+            entity.Property(e => e.NetbirdGroupName).HasColumnName("netbird_group_name").HasMaxLength(255);
+            entity.Property(e => e.IsolationPolicyId).HasColumnName("isolation_policy_id").HasMaxLength(255);
+            entity.Property(e => e.GroupMode).HasColumnName("group_mode").HasMaxLength(32);
+            entity.Property(e => e.ControlItManaged).HasColumnName("controlit_managed");
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
+            entity.HasIndex(e => e.TenantId).IsUnique().HasDatabaseName("idx_tenant_netbird_group_tenant");
+            entity.HasIndex(e => e.NetbirdGroupId).IsUnique().HasDatabaseName("idx_tenant_netbird_group_group");
         });
     }
 }

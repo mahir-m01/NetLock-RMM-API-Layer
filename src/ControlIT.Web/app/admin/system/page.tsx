@@ -111,7 +111,7 @@ export default function SystemHealthPage() {
   const { data, isLoading, isError, refetch, isFetching, dataUpdatedAt } = useQuery({
     queryKey: ["system-health"],
     queryFn: getSystemHealth,
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
   });
 
   if (user && user.role !== "SuperAdmin") return null;

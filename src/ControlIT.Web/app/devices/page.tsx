@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
+import { NetbirdStatus } from "@/components/network/netbird-status";
 
 const PAGE_SIZE = 20;
 
@@ -36,7 +37,7 @@ function SkeletonRows({ count }: { count: number }) {
     <>
       {Array.from({ length: count }).map((_, i) => (
         <TableRow key={i} className="border-border">
-          {Array.from({ length: 5 }).map((_, j) => (
+          {Array.from({ length: 6 }).map((_, j) => (
             <TableCell key={j}>
               <Skeleton className="h-4 w-full bg-muted" />
             </TableCell>
@@ -118,6 +119,7 @@ export default function DevicesPage() {
               <TableHead className="text-muted-foreground">Device Name</TableHead>
               <TableHead className="text-muted-foreground">Platform</TableHead>
               <TableHead className="text-muted-foreground">Status</TableHead>
+              <TableHead className="text-muted-foreground">NetBird</TableHead>
               <TableHead className="text-muted-foreground">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -127,7 +129,7 @@ export default function DevicesPage() {
             ) : data?.items.length === 0 ? (
               <TableRow className="border-border">
                 <TableCell
-                  colSpan={5}
+                  colSpan={6}
                   className="py-10 text-center text-muted-foreground"
                 >
                   No devices found.
@@ -158,6 +160,9 @@ export default function DevicesPage() {
                     >
                       {device.isOnline ? "Online" : "Offline"}
                     </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <NetbirdStatus device={device} />
                   </TableCell>
                   <TableCell>
                     <Button
