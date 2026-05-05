@@ -16,21 +16,21 @@ graph LR
     Device["Managed Device"]
 
     subgraph "ControlIT Frontend"
-        Web["Next.js dashboard\nJWT access token\nhttpOnly refresh cookie\nSSE subscriber"]
+        Web["Next.js dashboard<br/>JWT access token<br/>httpOnly refresh cookie<br/>SSE subscriber"]
     end
 
     subgraph "ControlIT API"
-        Endpoints["Minimal API endpoints\nAuth, devices, commands,\nnetwork, dashboard, audit"]
-        Security["Security layer\nJWT, RBAC, role ceiling,\ntenant scope, validation,\npartitioned rate limits"]
-        Services["Application services\nFacade, auth service,\ntenant resolver, command orchestration"]
-        Push["Push layer\nSSE streams\nPushEventHub\nNetLock live bridge"]
-        Persistence["Persistence boundary\nDapper read models\nEF Core ControlIT tables"]
+        Endpoints["Minimal API endpoints<br/>Auth, devices, commands,<br/>network, dashboard, audit"]
+        Security["Security layer<br/>JWT, RBAC, role ceiling,<br/>tenant scope, validation,<br/>partitioned rate limits"]
+        Services["Application services<br/>Facade, auth service,<br/>tenant resolver, command orchestration"]
+        Push["Push layer<br/>SSE streams<br/>PushEventHub<br/>NetLock live bridge"]
+        Persistence["Persistence boundary<br/>Dapper read models<br/>EF Core ControlIT tables"]
     end
 
     subgraph "External Systems"
-        NetLock["NetLock RMM\nMySQL read source\nSignalR commandHub\nadmin live state API"]
-        NetBird["NetBird Management API\ngroups, peers, setup keys,\nroutes, events"]
-        MySQL["Shared MySQL\nNetLock tables\ncontrolit_* tables"]
+        NetLock["NetLock RMM<br/>MySQL read source<br/>SignalR commandHub<br/>admin live state API"]
+        NetBird["NetBird Management API<br/>groups, peers, setup keys,<br/>routes, events"]
+        MySQL["Shared MySQL<br/>NetLock tables<br/>controlit_* tables"]
     end
 
     Operator --> Web
