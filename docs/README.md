@@ -20,3 +20,11 @@ pandoc docs/final-technical-report.md \
   --metadata title="ControlIT Final Technical Report" \
   -o docs/controlit-final-technical-report.pdf
 ```
+
+## Obsidian Copy
+
+Keep a current copy in:
+
+`/Users/mahir/Documents/Obsidian-Vault/6 - Main Notes/ControlIT/`
+
+Whenever `docs/final-technical-report.md` changes, copy the updated report and this README there.
