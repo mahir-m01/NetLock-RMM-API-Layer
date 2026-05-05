@@ -1,19 +1,10 @@
-@startuml UC2-API-Layer
+@startuml UC2-API-Layer-Alpha
 ' ============================================================
-' UC-2: ControlIT.Api — REST API Layer Drill-Down (v2 — post 05 + 05B)
-' Scope : ControlIT.Api internals — how the API layer satisfies
-'         use cases, JWT auth enforcement, sync vs async distinction,
-'         phase boundaries, external system dependencies per group.
-' v2 changes:
-'   - New Group 0 (Authentication) from Contract 05B.
-'   - Old Group 2 "API Key" use cases replaced by JWT validation;
-'     every group's <<include>> now points to Validate JWT.
-'   - Group 4 expanded with file browser, services, task manager,
-'     power, event log (Contract 05 §5.3).
-' Convention: Primary actors LEFT, secondary RIGHT.
+' UC-2: ControlIT.Api alpha - frontend-facing API layer
+' Source checked against current code on dev branch.
 ' ============================================================
 
-title UC-2: ControlIT.Api — REST API Layer Drill-Down (v2)
+title UC-2: ControlIT.Api Alpha - REST API Layer Drill-Down
 
 left to right direction
 
@@ -21,7 +12,6 @@ skinparam packageStyle rectangle
 skinparam shadowing false
 skinparam defaultFontName Arial
 skinparam defaultFontSize 11
-
 skinparam usecase {
   BackgroundColor #DDEEFF
   BorderColor #336699
@@ -29,442 +19,219 @@ skinparam usecase {
   ActorBackgroundColor #FFEFCD
   ActorBorderColor #AA6622
 }
-
 skinparam rectangle {
   BackgroundColor #FAFAFA
   BorderColor #1a1a2e
   BorderThickness 2
 }
-
 skinparam note {
   BackgroundColor #FFFDE7
   BorderColor #AA8800
 }
 
-' ============================================================
-' LEFT — Primary Actors (callers / initiators)
-' ============================================================
+actor "Dashboard User" as User
+actor "Next.js\nDashboard" as Web <<system>>
+actor "Threat Actor\n[stolen token/cookie]" as Threat <<threat>>
 
-actor "Dashboard User" as DashUser
-actor "Control IT\nDashboard\n(Next.js)" as Dashboard <<system>>
-actor "Attacker\n[stolen token]" as Attacker <<threat>>
+User --> Web
 
-DashUser --> Dashboard
-
-' ============================================================
-' SYSTEM BOUNDARY
-' ============================================================
-
-rectangle "ControlIT.Api  (ASP.NET Core 10 — Minimal APIs)" {
-
-  ' ── Group 0: Authentication (NEW — Contract 05B) ───────
-  package "0 — Authentication\n[Contract 05B]" #E8F5E9 {
+rectangle "ControlIT.Api (ASP.NET Core Minimal APIs)" {
+  package "0 - Auth and Session" #E8F5E9 {
     usecase "POST /auth/login" as UCLogin
     usecase "POST /auth/refresh" as UCRefresh
     usecase "POST /auth/logout" as UCLogout
     usecase "POST /auth/change-password" as UCChangePwd
     usecase "POST /auth/forgot-password" as UCForgotPwd
     usecase "POST /auth/reset-password" as UCResetPwd
-    usecase "GET  /auth/me" as UCMe
-    usecase "Manage Users\n(/users CRUD)" as UCUsers
-    usecase "Force Password Reset\n(/users/{id}/force-password-reset)" as UCForceReset
+    usecase "GET /auth/me" as UCMe
+    usecase "Bootstrap first\nSuperAdmin from env" as UCBootstrap
+    usecase "Refresh rotation\n+ replay revocation" as UCRotate
   }
 
-  ' ── Group 1: Startup & Health ──────────────────────────
-  package "1 — Startup & Health\n[Phase 1]" #DDEECC {
-    usecase "Validate NetLock\nSchema" as UCSchema
-    usecase "Connect to\nSignalR Hub" as UCConnect
-    usecase "Health Check" as UCHealth
-    usecase "Handle Schema\nMismatch" as UCMismatch
-    usecase "Bootstrap SuperAdmin\non Empty DB" as UCBootstrap
+  package "1 - JWT, RBAC, Tenant Scope" #ECEFF1 {
+    usecase "Validate JWT\niss/aud/sig/lifetime" as UCJwt
+    usecase "Resolve Actor\nfrom claims" as UCActor
+    usecase "TenantContext\nall tenants vs own tenant" as UCTenantCtx
+    usecase "Authorization policies" as UCPolicies
+    usecase "Role ceiling\nno equal-or-higher management" as UCRoleCeiling
+    usecase "TenantTargetResolver\n?targetTenantId" as UCTargetTenant
+    usecase "Rate limit\napi + commands" as UCRate
   }
 
-  ' ── Group 2: JWT + Authorization (REPLACES old API-key group) ─
-  package "2 — Auth Validation & Authorization\n[cross-cutting — 05B]" #ECEFF1 {
-    usecase "Validate JWT" as UCValidJwt
-    usecase "Resolve ClaimsPrincipal\nto Actor/Tenant" as UCResolveActor
-    usecase "Enforce Policy\n(SuperAdminOnly, CpAdminOrAbove,\nTenantMember, CanExecuteCommands)" as UCPolicy
+  package "2 - User Management" #E3F2FD {
+    usecase "GET /users" as UCUsersList
+    usecase "POST /users\nreturn generated password once" as UCUsersCreate
+    usecase "PATCH /users/{id}" as UCUsersPatch
+    usecase "DELETE /users/{id}\nsoft deactivate" as UCUsersDelete
+    usecase "POST /users/{id}/force-password-reset" as UCForceReset
   }
 
-  ' ── Group 3: Device / Read queries ──────────────────────
-  package "3 — Device Queries & NetLock Reads\n[sync — DB reads, tenant-scoped]\n[Contract 05 §5.2]" #DDEEFF {
-    usecase "GET /devices" as UCListDev
-    usecase "GET /devices/{id}" as UCGetDev
-    usecase "GET /devices/unauthorised" as UCUnauth
-    usecase "GET /tenants" as UCTenants
-    usecase "GET /clients" as UCClients
-    usecase "GET /policies" as UCPolicies
-    usecase "GET /automations" as UCAutos
-    usecase "GET /scripts" as UCScripts
-    usecase "GET /jobs" as UCJobs
-    usecase "GET /sensors" as UCSensors
-    usecase "GET /files" as UCFiles
-    usecase "GET /installer-configs" as UCInstallers
-    usecase "GET /notification-channels\n(secrets scrubbed)" as UCNotifs
-    usecase "GET /dashboard" as UCDash
-  }
-
-  ' ── Group 4: Command Dispatch (EXPANDED — 05 §5.3) ─────
-  package "4 — Command Dispatch\n[async — SignalR, Option D per call]\n[Contract 05 §5.3]" #FFF3E0 {
-    usecase "POST /commands/execute\n(remote shell)" as UCExec
-    usecase "Browse Remote Files\n(POST /commands/files/*)" as UCFileBrowse
-    usecase "Manage Services\n(POST /commands/services/{action})" as UCServices
-    usecase "Kill Process\n(POST /commands/processes/kill)" as UCKill
-    usecase "Power Action\n(POST /commands/power/{op})" as UCPower
-    usecase "View Event Log\n(POST /commands/events/query)" as UCEventLog
-    usecase "Virtual Display\n(POST /commands/virtual-display/*)" as UCVirtDisp
-    usecase "Tray Chat\n(POST /commands/tray-chat)" as UCTrayChat
-    usecase "Handle Command\nTimeout" as UCCmdTimeout
-    usecase "Handle SignalR\nDisconnected" as UCDisconnect
-  }
-
-  ' ── Group 5: Device Management (NEW — 05 §5.4) ─────────
-  package "5 — Device Management\n[05 §5.4 — NetLock admin REST passthrough]" #E1F5FE {
-    usecase "POST /devices/{id}/move" as UCMove
-    usecase "PUT  /devices/{id}/label" as UCLabel
-    usecase "POST /devices/{id}/approve" as UCApprove
-    usecase "POST /devices/{id}/reject" as UCReject
-  }
-
-  ' ── Group 6: Network (Netbird) — Phase 1 ───────────────
-  package "6 — Network Queries\n[sync — Netbird REST]" #DDEEEE {
-    usecase "GET /network/peers" as UCPeers
-    usecase "POST /network/policy\n[Contract 06]" as UCNetPolicy
-    usecase "DELETE /network/peer/{id}" as UCDelPeer
-  }
-
-  ' ── Group 7: Events & Alerts ───────────────────────────
-  package "7 — Events & Alerts" #E8EAF6 {
+  package "3 - NetLock Reads and Dashboard" #DDEEFF {
+    usecase "GET /dashboard" as UCDashboard
+    usecase "GET /dashboard/stream\nGET /sync/stream" as UCStream
+    usecase "GET /devices\nGET /devices/{id}" as UCDevices
+    usecase "GET /tenants\nGET /tenants/{id}" as UCTenants
     usecase "GET /events" as UCEvents
-    usecase "GET /alerts/wazuh\n[Phase 2]" as UCWazuhAlerts
-    usecase "POST /alerts/acknowledge\n[Phase 2]" as UCAck
+    usecase "GET /audit/logs" as UCAudit
+    usecase "GET /health\nGET /admin/system-health" as UCHealth
+    usecase "PushEventHub\nsnapshot + live tenant-filtered events" as UCPush
   }
 
-  ' ── Group 8: Audit Log ─────────────────────────────────
-  package "8 — Audit Log\n[cross-cutting]" #ECEFF1 {
-    usecase "GET /audit/logs" as UCAuditGet
-    usecase "GET /audit/logs/export" as UCAuditExport
-    usecase "Record Audit\nEvent" as UCRecord
+  package "4 - Commands" #FFF3E0 {
+    usecase "POST /commands/execute" as UCExec
+    usecase "POST /commands/batch\nsequential fan-out" as UCBatch
+    usecase "Validate batch request\nunique ids, max 25, shell allow-list" as UCBatchValid
+    usecase "Audit command\nPENDING -> terminal result" as UCCmdAudit
+    usecase "Publish command.status.updated" as UCCmdPush
   }
 
-  ' ── Group 9: Device Identity (05 §5.5) ─────────────────
-  package "9 — Device Identity\n[05 §5.5]" #FFF8E1 {
-    usecase "Reconcile Device Identity\n(background IHostedService)" as UCReconcile
-    usecase "GET /identity/resolve" as UCIdResolve
-    usecase "POST /identity/override" as UCIdOverride
-  }
-
-  ' ── Rate Limiting ──────────────────────────────────────
-  package "Rate Limiting\n[threat mitigation]" #FFEBEE {
-    usecase "Rate Limit / Block" as UCRateLimit
+  package "5 - NetBird MVP" #DDEEEE {
+    usecase "GET /network/groups" as UCGroups
+    usecase "POST /network/tenant-group\nexternal/read_only" as UCBindGroup
+    usecase "GET /network/peers\nGET /network/peers/{id}" as UCPeers
+    usecase "GET /network/setup-keys\nredacted key" as UCSetupList
+    usecase "POST /network/setup-keys\nraw key once" as UCSetupCreate
+    usecase "DELETE /network/setup-keys/{id}" as UCSetupDelete
+    usecase "POST /network/enrol" as UCEnrol
+    usecase "POST/DELETE\n/network/peers/{peerId}/link" as UCLink
+    usecase "PUT /network/peers/{id}\nDELETE /network/peer/{id}" as UCPeerMutate
+    usecase "GET /network/summary" as UCNetSummary
+    usecase "GET /network/routes\nGET /network/policies\nGET /network/events" as UCNetVisibility
   }
 }
 
-' ============================================================
-' RIGHT — Secondary Actors
-' ============================================================
+actor "MySQL\nNetLock read-only + controlit_*" as MySQL <<database>>
+actor "NetLock RMM\npre-existing install" as NetLock <<system>>
+actor "NetBird\nManagement API" as NetBird <<external>>
+actor "Browser\nmemory access token\nhttpOnly refresh cookie" as Browser <<system>>
 
-actor "NetLock\nSignalR Hub" as SignalR <<system>>
-actor "NetLock\nAdmin REST" as NetLockREST <<system>>
-actor "MySQL\nDatabase" as MySQL <<database>>
-actor "Netbird\nREST API" as NetbirdAPI <<external>>
-actor "Wazuh\nREST API" as WazuhAPI <<external>>
+Web --> UCLogin
+Web --> UCRefresh
+Web --> UCLogout
+Web --> UCChangePwd
+Web --> UCMe
+Web --> UCUsersList
+Web --> UCUsersCreate
+Web --> UCUsersPatch
+Web --> UCDashboard
+Web --> UCStream
+Web --> UCDevices
+Web --> UCTenants
+Web --> UCEvents
+Web --> UCAudit
+Web --> UCExec
+Web --> UCBatch
+Web --> UCGroups
+Web --> UCBindGroup
+Web --> UCPeers
+Web --> UCSetupList
+Web --> UCSetupCreate
+Web --> UCSetupDelete
+Web --> UCNetSummary
+Web --> UCNetVisibility
+Web --> UCHealth
+Threat --> UCRate
 
-' ============================================================
-' PRIMARY ACTOR → USE CASE ASSOCIATIONS
-' ============================================================
+UCLogin ..> Browser : returns access token\nsets refresh cookie
+UCRefresh ..> UCRotate : <<include>>
+UCLogin ..> UCBootstrap : startup precondition
 
-Dashboard --> UCLogin
-Dashboard --> UCRefresh
-Dashboard --> UCLogout
-Dashboard --> UCChangePwd
-Dashboard --> UCForgotPwd
-Dashboard --> UCResetPwd
-Dashboard --> UCMe
-Dashboard --> UCUsers
-Dashboard --> UCForceReset
+UCUsersCreate ..> UCRoleCeiling : <<include>>
+UCUsersPatch ..> UCRoleCeiling : <<include>>
+UCUsersDelete ..> UCRoleCeiling : <<include>>
+UCForceReset ..> UCRoleCeiling : <<include>>
 
-Dashboard --> UCListDev
-Dashboard --> UCGetDev
-Dashboard --> UCUnauth
-Dashboard --> UCTenants
-Dashboard --> UCClients
-Dashboard --> UCPolicies
-Dashboard --> UCAutos
-Dashboard --> UCScripts
-Dashboard --> UCJobs
-Dashboard --> UCSensors
-Dashboard --> UCFiles
-Dashboard --> UCInstallers
-Dashboard --> UCNotifs
-Dashboard --> UCDash
+UCDevices ..> UCTenantCtx : <<include>>
+UCTenants ..> UCTenantCtx : <<include>>
+UCEvents ..> UCTenantCtx : <<include>>
+UCAudit ..> UCTenantCtx : <<include>>
+UCExec ..> UCTenantCtx : <<include>>
+UCBatch ..> UCTenantCtx : <<include>>
 
-Dashboard --> UCExec
-Dashboard --> UCFileBrowse
-Dashboard --> UCServices
-Dashboard --> UCKill
-Dashboard --> UCPower
-Dashboard --> UCEventLog
-Dashboard --> UCVirtDisp
-Dashboard --> UCTrayChat
+UCPeers ..> UCTargetTenant : <<include>>
+UCSetupList ..> UCTargetTenant : <<include>>
+UCSetupCreate ..> UCTargetTenant : <<include>>
+UCSetupDelete ..> UCTargetTenant : <<include>>
+UCBindGroup ..> UCTargetTenant : <<include>>
+UCNetSummary ..> UCTargetTenant : <<include>>
 
-Dashboard --> UCMove
-Dashboard --> UCLabel
-Dashboard --> UCApprove
-Dashboard --> UCReject
+UCBatch ..> UCBatchValid : <<include>>
+UCExec ..> UCCmdAudit : <<include>>
+UCBatch ..> UCCmdAudit : <<include>>
+UCExec ..> UCCmdPush : <<include>>
+UCBatch ..> UCCmdPush : <<include>>
+UCStream ..> UCPush : <<include>>
+UCCmdPush ..> UCPush : publishes
 
-Dashboard --> UCPeers
-Dashboard --> UCEvents
-Dashboard --> UCWazuhAlerts
-Dashboard --> UCAuditGet
-Dashboard --> UCAuditExport
-Dashboard --> UCIdResolve
-Dashboard --> UCIdOverride
-Dashboard --> UCHealth
-
-Attacker --> UCRateLimit
-
-' ============================================================
-' USE CASE → SECONDARY ACTOR ASSOCIATIONS
-' ============================================================
-
-UCSchema --> MySQL
-UCConnect --> SignalR
-UCBootstrap --> MySQL
+UCJwt --> UCActor
+UCActor --> UCTenantCtx
+UCPolicies --> UCRoleCeiling
+UCPolicies --> UCTenantCtx
 
 UCLogin --> MySQL
 UCRefresh --> MySQL
 UCLogout --> MySQL
 UCChangePwd --> MySQL
-UCForgotPwd --> MySQL
-UCResetPwd --> MySQL
-UCMe --> MySQL
-UCUsers --> MySQL
+UCUsersList --> MySQL
+UCUsersCreate --> MySQL
+UCUsersPatch --> MySQL
+UCUsersDelete --> MySQL
 UCForceReset --> MySQL
-
-UCListDev --> MySQL
-UCGetDev --> MySQL
-UCUnauth --> MySQL
+UCDashboard --> MySQL
+UCDevices --> MySQL
 UCTenants --> MySQL
-UCClients --> MySQL
-UCPolicies --> MySQL
-UCAutos --> MySQL
-UCScripts --> MySQL
-UCJobs --> MySQL
-UCSensors --> MySQL
-UCFiles --> MySQL
-UCInstallers --> MySQL
-UCNotifs --> MySQL
-UCDash --> MySQL
-
-UCExec --> SignalR
-UCFileBrowse --> SignalR
-UCServices --> SignalR
-UCKill --> SignalR
-UCPower --> SignalR
-UCEventLog --> SignalR
-UCVirtDisp --> SignalR
-UCTrayChat --> SignalR
-
-UCMove --> NetLockREST
-UCLabel --> NetLockREST
-UCApprove --> NetLockREST
-UCReject --> NetLockREST
-
-UCPeers --> NetbirdAPI
-UCNetPolicy --> NetbirdAPI
-UCDelPeer --> NetbirdAPI
-
 UCEvents --> MySQL
-UCWazuhAlerts --> WazuhAPI
-UCAck --> WazuhAPI
+UCAudit --> MySQL
+UCExec --> MySQL
+UCBatch --> MySQL
+UCBindGroup --> MySQL
+UCLink --> MySQL
 
-UCAuditGet --> MySQL
-UCAuditExport --> MySQL
-UCRecord --> MySQL
+UCDashboard --> NetLock
+UCDevices --> NetLock
+UCExec --> NetLock
+UCBatch --> NetLock
+UCHealth --> NetLock
 
-UCReconcile --> MySQL
-UCIdResolve --> MySQL
-UCIdOverride --> MySQL
+UCGroups --> NetBird
+UCBindGroup --> NetBird
+UCPeers --> NetBird
+UCSetupList --> NetBird
+UCSetupCreate --> NetBird
+UCSetupDelete --> NetBird
+UCEnrol --> NetBird
+UCLink --> NetBird
+UCPeerMutate --> NetBird
+UCNetVisibility --> NetBird
+UCNetSummary --> NetBird
 
-UCValidJwt --> MySQL
+note right of UCTargetTenant
+  Elevated roles (SuperAdmin/CpAdmin):
+  targetTenantId required for tenant-scoped
+  NetBird operations.
 
-' ============================================================
-' INCLUDES — JWT validation + policy enforcement + tenant scoping
-' ============================================================
-
-' Everything authenticated includes JWT validation + actor resolution.
-UCRefresh       ..> UCValidJwt     : <<include>>
-UCLogout        ..> UCValidJwt     : <<include>>
-UCChangePwd     ..> UCValidJwt     : <<include>>
-UCMe            ..> UCValidJwt     : <<include>>
-UCUsers         ..> UCValidJwt     : <<include>>
-UCForceReset    ..> UCValidJwt     : <<include>>
-
-UCListDev       ..> UCValidJwt     : <<include>>
-UCListDev       ..> UCResolveActor : <<include>>
-UCListDev       ..> UCPolicy       : <<include>>
-UCGetDev        ..> UCValidJwt     : <<include>>
-UCGetDev        ..> UCResolveActor : <<include>>
-UCGetDev        ..> UCPolicy       : <<include>>
-UCUnauth        ..> UCValidJwt     : <<include>>
-UCUnauth        ..> UCPolicy       : <<include>>
-UCTenants       ..> UCValidJwt     : <<include>>
-UCClients       ..> UCValidJwt     : <<include>>
-UCPolicies      ..> UCValidJwt     : <<include>>
-UCAutos         ..> UCValidJwt     : <<include>>
-UCScripts       ..> UCValidJwt     : <<include>>
-UCJobs          ..> UCValidJwt     : <<include>>
-UCSensors       ..> UCValidJwt     : <<include>>
-UCFiles         ..> UCValidJwt     : <<include>>
-UCInstallers    ..> UCValidJwt     : <<include>>
-UCNotifs        ..> UCValidJwt     : <<include>>
-UCDash          ..> UCValidJwt     : <<include>>
-
-UCExec          ..> UCValidJwt     : <<include>>
-UCExec          ..> UCPolicy       : <<include>>
-UCFileBrowse    ..> UCValidJwt     : <<include>>
-UCFileBrowse    ..> UCPolicy       : <<include>>
-UCServices      ..> UCValidJwt     : <<include>>
-UCServices      ..> UCPolicy       : <<include>>
-UCKill          ..> UCValidJwt     : <<include>>
-UCKill          ..> UCPolicy       : <<include>>
-UCPower         ..> UCValidJwt     : <<include>>
-UCPower         ..> UCPolicy       : <<include>>
-UCEventLog      ..> UCValidJwt     : <<include>>
-UCEventLog      ..> UCPolicy       : <<include>>
-UCVirtDisp      ..> UCValidJwt     : <<include>>
-UCVirtDisp      ..> UCPolicy       : <<include>>
-UCTrayChat      ..> UCValidJwt     : <<include>>
-UCTrayChat      ..> UCPolicy       : <<include>>
-
-UCMove          ..> UCValidJwt     : <<include>>
-UCMove          ..> UCPolicy       : <<include>>
-UCLabel         ..> UCValidJwt     : <<include>>
-UCLabel         ..> UCPolicy       : <<include>>
-UCApprove       ..> UCValidJwt     : <<include>>
-UCApprove       ..> UCPolicy       : <<include>>
-UCReject        ..> UCValidJwt     : <<include>>
-UCReject        ..> UCPolicy       : <<include>>
-
-UCPeers         ..> UCValidJwt     : <<include>>
-UCEvents        ..> UCValidJwt     : <<include>>
-UCWazuhAlerts   ..> UCValidJwt     : <<include>>
-UCAuditGet      ..> UCValidJwt     : <<include>>
-UCAuditGet      ..> UCPolicy       : <<include>>
-UCAuditExport   ..> UCValidJwt     : <<include>>
-
-UCIdResolve     ..> UCValidJwt     : <<include>>
-UCIdOverride    ..> UCValidJwt     : <<include>>
-UCIdOverride    ..> UCPolicy       : <<include>>
-
-' Audit record on every state-mutating call.
-UCExec          ..> UCRecord       : <<include>>
-UCFileBrowse    ..> UCRecord       : <<include>>
-UCServices      ..> UCRecord       : <<include>>
-UCKill          ..> UCRecord       : <<include>>
-UCPower         ..> UCRecord       : <<include>>
-UCEventLog      ..> UCRecord       : <<include>>
-UCVirtDisp      ..> UCRecord       : <<include>>
-UCTrayChat      ..> UCRecord       : <<include>>
-UCMove          ..> UCRecord       : <<include>>
-UCLabel         ..> UCRecord       : <<include>>
-UCApprove       ..> UCRecord       : <<include>>
-UCReject        ..> UCRecord       : <<include>>
-UCIdOverride    ..> UCRecord       : <<include>>
-UCLogin         ..> UCRecord       : <<include>>
-UCLogout        ..> UCRecord       : <<include>>
-UCChangePwd     ..> UCRecord       : <<include>>
-UCResetPwd      ..> UCRecord       : <<include>>
-UCUsers         ..> UCRecord       : <<include>>
-UCForceReset    ..> UCRecord       : <<include>>
-
-' ============================================================
-' EXTENDS
-' ============================================================
-
-UCMismatch      ..> UCConnect   : <<extend>>
-UCBootstrap     ..> UCConnect   : <<extend>>
-
-UCCmdTimeout    ..> UCExec        : <<extend>>
-UCCmdTimeout    ..> UCFileBrowse  : <<extend>>
-UCCmdTimeout    ..> UCServices    : <<extend>>
-UCCmdTimeout    ..> UCKill        : <<extend>>
-UCCmdTimeout    ..> UCPower       : <<extend>>
-UCCmdTimeout    ..> UCEventLog    : <<extend>>
-UCCmdTimeout    ..> UCVirtDisp    : <<extend>>
-UCCmdTimeout    ..> UCTrayChat    : <<extend>>
-
-UCDisconnect    ..> UCExec        : <<extend>>
-UCDisconnect    ..> UCFileBrowse  : <<extend>>
-UCDisconnect    ..> UCServices    : <<extend>>
-UCDisconnect    ..> UCKill        : <<extend>>
-UCDisconnect    ..> UCPower       : <<extend>>
-UCDisconnect    ..> UCEventLog    : <<extend>>
-UCDisconnect    ..> UCVirtDisp    : <<extend>>
-UCDisconnect    ..> UCTrayChat    : <<extend>>
-
-UCRateLimit     ..> UCLogin       : <<extend>>
-UCRateLimit     ..> UCExec        : <<extend>>
-UCRateLimit     ..> UCForgotPwd   : <<extend>>
-
-' ============================================================
-' NOTES
-' ============================================================
-
-note top of UCValidJwt
-  JWT Bearer middleware — cross-cutting.
-  Every request except /health and
-  Group 0 anonymous endpoints (login, refresh,
-  forgot-password, reset-password) passes
-  through JWT validation.
-  tenant_id is derived from the JWT claim —
-  NEVER trusted from client headers or body.
-  Replaces the Phase 1 ApiKeyMiddleware.
+  Scoped roles:
+  targetTenantId omitted or equal to own tenant.
+  Different tenant returns 403.
 end note
 
-note right of UCPolicy
-  Four policies:
-  - SuperAdminOnly       → DELETE /users/{id}
-  - CpAdminOrAbove       → /users CRUD, /identity/override
-  - TenantMember         → /devices, /events, /audit, /dashboard
-  - CanExecuteCommands   → /commands/*, /devices/{id}/{move|label|approve|reject}
+note right of UCSetupCreate
+  Raw setup key returned only by
+  POST /network/setup-keys.
+  List endpoint always returns "[redacted]".
 end note
 
-note right of UCWazuhAlerts
-  Phase 2 — requires Wazuh Manager deployed.
-  WazuhApiClient is registered in DI only when
-  Wazuh:Enabled = true.
+note bottom of UCBatch
+  Batch validates request then executes same
+  command path per device. Each item gets
+  audit and command.status.updated push event.
 end note
 
-note bottom of UCExec
-  ASYNC path. Option D per call:
-  - CommandEndpoints → CommandDispatcherBase subclass
-  - Subclass acquires its own HubConnection,
-    registers its own .On<string>() handler,
-    invokes, awaits (cts-bounded), disposes.
-  - No shared _pending dictionary.
-  - 409 Conflict only on same-device + same-dispatcher
-    in-flight (enforced by AcquireAdminConnectionAsync
-    + dispatcher-scoped gate).
-  - 504 on timeout, 503 on hub disconnect, 404 on
-    cross-tenant device lookup.
-end note
-
-note bottom of UCListDev
-  All Group 3 queries are tenant-scoped through
-  IActorContext.TenantId. For CpAdmin/SuperAdmin
-  the tenant_id is null → repository treats that
-  as "all tenants" — handled inside the repo, not
-  the endpoint. See TenantContext change in 05B §5B.5.
-end note
-
-note top of UCBootstrap
-  Ran once by BootstrapUserSeeder at startup.
-  If controlit_users is empty, creates SuperAdmin
-  from CONTROLIT_BOOTSTRAP_EMAIL / _PASSWORD with
-  must_change_password = true.
-  Missing env vars on first run → fail fast + loud.
+note bottom of NetLock
+  Production boundary:
+  NetLock is pre-existing vendor stack.
+  ControlIT reads NetLock tables via Dapper
+  and calls SignalR/Admin surfaces.
 end note
 
 @enduml

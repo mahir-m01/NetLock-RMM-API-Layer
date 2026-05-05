@@ -1,9 +1,8 @@
-# SEQ1 — POST /commands/execute: Full Command Dispatch Flow
+# SEQ1 — POST /commands/execute and /commands/batch
 
-**Scope:** End-to-end flow for dispatching a remote command to a managed endpoint via `POST /commands/execute`.
-Covers API key validation, tenant resolution, SignalR dispatch, response correlation by `device_id`, audit logging, and timeout handling.
-**Phase:** Phase 1 — NetLock RMM integration.
-**Source:** architect_api_layer.md (post-evaluation), source-of-truth.md.
+**Scope:** Current command dispatch path through ControlIT API layer to NetLock `commandHub`, plus dashboard push/SSE side effects.
+**Current auth:** JWT bearer auth. `ApiKeyMiddleware` is retained in source as rollback reference but is not registered.
+**Current request shape:** Clients send `deviceId`; backend resolves tenant-scoped `Device` and uses backend-only `access_key`.
 
 ---
 
@@ -12,109 +11,164 @@ sequenceDiagram
     autonumber
 
     actor Dashboard as Dashboard<br/>(Next.js)
-    participant MW as ApiKeyMiddleware
-    participant TC as TenantContext<br/>(Scoped)
+    participant Auth as JWT AuthN/AuthZ<br/>CanExecuteCommands
+    participant Rate as RateLimiter<br/>commands policy
+    participant TC as TenantContext<br/>from IActorContext/JWT
     participant CE as CommandEndpoints
-    participant Facade as ControlItFacade
-    participant Disp as SignalRCommandDispatcher
-    participant SRSvc as NetLockSignalRService<br/>(Singleton)
     participant Audit as AuditService
-    participant DB as MySQL<br/>(controlit_audit_log)
-    participant Hub as NetLock commandHub<br/>(SignalR)
-    participant Agent as NetLock Agent<br/>(on device)
+    participant EF as ControlIT EF Core<br/>controlit_audit_log
+    participant Facade as ControlItFacade
+    participant DevRepo as MySqlDeviceRepository<br/>Dapper read-only
+    participant NetLockAdmin as NetLockAdminClient<br/>connected access keys
+    participant Push as PushEventHub
+    participant SSE as /dashboard/stream<br/>/sync/stream subscribers
+    participant Disp as SignalRCommandDispatcher
+    participant SRSvc as NetLockSignalRService<br/>Singleton hosted service
+    participant NLDB as NetLock MySQL<br/>devices/accounts read-only
+    participant Hub as NetLock commandHub<br/>SignalR
+    participant Agent as NetLock Agent<br/>(managed device)
 
     %% ─────────────────────────────────────────
-    %% 1. Request enters — middleware pipeline
+    %% 1. Request enters authenticated pipeline
     %% ─────────────────────────────────────────
 
-    Dashboard->>MW: POST /commands/execute<br/>x-api-key: <key><br/>{ deviceAccessKey, command }
+    Dashboard->>Auth: POST /commands/execute<br/>Authorization: Bearer JWT<br/>{ deviceId, command, shell, timeoutSeconds }
+    Auth->>TC: IActorContext reads sub, role, tenant_id, email claims
+    Auth->>CE: Policy CanExecuteCommands<br/>SuperAdmin, CpAdmin, Technician
+    CE->>Rate: commands sliding-window limiter<br/>partition=user:{sub}, fallback=ip
 
-    MW->>DB: SELECT tenant_id<br/>FROM controlit_tenant_api_keys<br/>WHERE key_hash = @keyHash<br/>AND (expires_at IS NULL OR expires_at > UTC_TIMESTAMP())
-    DB-->>MW: { tenant_id: 3 }
-
-    Note over MW,TC: tenant_id is NEVER trusted from the client.<br/>Always derived server-side here.
-
-    MW->>TC: tenantContext.TenantId = 3
-    MW->>CE: next(context) — request continues
-
-    %% ─────────────────────────────────────────
-    %% 2. Endpoint handler
-    %% ─────────────────────────────────────────
-
-    CE->>CE: Validate request body<br/>(deviceAccessKey required)
-    CE->>Facade: ExecuteCommandAsync(deviceAccessKey, commandJson, tenantId)
-
-    %% ─────────────────────────────────────────
-    %% 3. Audit — record attempt before dispatch
-    %% ─────────────────────────────────────────
-
-    Facade->>Audit: RecordAsync(AuditEntry { action: "command.execute",<br/>tenantId: 3, deviceKey: "...", timestamp: UtcNow })
-    Audit->>DB: INSERT INTO controlit_audit_log (...)
-    DB-->>Audit: ok
-
-    Note over Audit: Audit write happens before dispatch.<br/>Never throws — logs failure and continues.
-
-    %% ─────────────────────────────────────────
-    %% 4. Command dispatch via SignalR
-    %% ─────────────────────────────────────────
-
-    Facade->>Disp: DispatchAsync(deviceAccessKey, commandJson)
-    Disp->>SRSvc: InvokeCommandAsync(deviceAccessKey, commandJson)
-
-    SRSvc->>SRSvc: Resolve device_id: SELECT id FROM devices<br/>WHERE access_key = @deviceAccessKey AND tenant_id = @tenantId
-
-    alt _pendingCommands already has device_id entry
-        SRSvc-->>Disp: throw InvalidOperationException("Command already pending for this device")
-        Disp-->>Facade: propagates
-        Facade-->>CE: propagates
-        CE-->>Dashboard: HTTP 409 Conflict { error: "A command is already pending for this device" }
+    alt rate limit exceeded
+        Rate-->>Dashboard: HTTP 429
     end
 
-    SRSvc->>SRSvc: tcs = new TaskCompletionSource<string>()<br/>_pendingCommands[device_id] = tcs<br/>cts = new CancellationTokenSource(config.CommandTimeoutSeconds)
-
-    Note over SRSvc: Key = device_id (integer PK), NOT responseId.<br/>NetLock generates responseId internally — ControlIT never receives it.<br/>One pending command per device enforced here.
-
-    SRSvc->>SRSvc: BuildRootEntity(deviceAccessKey, commandJson)<br/>→ { admin_identity: { token }, target_device: { access_key },<br/>command: { type: 0, wait_response: true, powershell_code: "..." } }
-
-    SRSvc->>Hub: InvokeAsync("MessageReceivedFromWebconsole", encodedMessage)
-    Hub->>Agent: Forward command to target device
+    CE->>CE: Clamp timeoutSeconds to 5..120
 
     %% ─────────────────────────────────────────
-    %% 5a. Happy path — response received in time
+    %% 2. Audit pending before dispatch
     %% ─────────────────────────────────────────
 
-    Agent-->>Hub: Command output
-    Hub-->>SRSvc: On("ReceiveClientResponseRemoteShell", "device_id>>nlocksep<<output")
+    CE->>Audit: RecordAsync(COMMAND_EXECUTE, PENDING,<br/>tenantId from TenantContext, actor from JWT)
+    Audit->>EF: INSERT controlit_audit_log
+    EF-->>Audit: ok
 
-    SRSvc->>SRSvc: Parse device_id from "device_id>>nlocksep<<output"<br/>_pendingCommands.TryRemove(device_id) → tcs<br/>tcs.TrySetResult(output)
+    Note over CE,Audit: Tenant and actor are server-derived.<br/>Request body cannot choose tenant scope.
 
-    SRSvc-->>Disp: return output string
-    Disp-->>Facade: return CommandResult { output }
+    %% ─────────────────────────────────────────
+    %% 3. Facade resolves device and online state
+    %% ─────────────────────────────────────────
+
+    CE->>Facade: ExecuteCommandAsync(CommandRequest, TenantContext)
+    Facade->>SRSvc: Check IEndpointProvider.IsConnected
+
+    alt NetLock hub disconnected
+        Facade-->>CE: InvalidOperationException
+        CE->>Audit: RecordAsync(COMMAND_EXECUTE, FAILURE)
+        Audit->>EF: INSERT controlit_audit_log
+        CE-->>Dashboard: HTTP 503<br/>{ title: "Service Unavailable" }
+    end
+
+    Facade->>DevRepo: GetByIdAsync(deviceId, TenantContext)
+    DevRepo->>NLDB: SELECT device fields FROM devices<br/>WHERE id=@id AND tenant_id=@tenantId<br/>(no tenant filter for SuperAdmin/CpAdmin)
+    NLDB-->>DevRepo: Device with access_key
+    DevRepo-->>Facade: Device
+
+    alt device not in tenant scope
+        Facade-->>CE: KeyNotFoundException
+        CE->>Audit: RecordAsync(COMMAND_EXECUTE, FAILURE)
+        Audit->>EF: INSERT controlit_audit_log
+        CE-->>Dashboard: HTTP 404<br/>{ title: "Not Found" }
+    end
+
+    Facade->>Push: Publish command.status<br/>{ deviceId, status: "PENDING", message: "dispatch_started" }
+    Push-->>SSE: event: command.status<br/>tenant-scoped fanout
+
+    Facade->>NetLockAdmin: GetConnectedAccessKeysAsync()
+    NetLockAdmin-->>Facade: live NetLock access_key set
+
+    alt device access_key not connected
+        Facade->>Push: Publish command.status FAILURE<br/>message: "device_offline"
+        Push-->>SSE: event: command.status
+        Facade-->>CE: InvalidOperationException(device offline)
+        CE->>Audit: RecordAsync(COMMAND_EXECUTE, FAILURE)
+        Audit->>EF: INSERT controlit_audit_log
+        CE-->>Dashboard: HTTP 503<br/>{ title: "Service Unavailable" }
+    end
+
+    %% ─────────────────────────────────────────
+    %% 4. Dispatch through NetLock SignalR
+    %% ─────────────────────────────────────────
+
+    Facade->>Disp: DispatchAsync(device.AccessKey, CommandRequest)
+    Disp->>Disp: Build NetLock command JSON<br/>type=0, wait_response=true,<br/>powershell_code=Base64(command), command=timeoutSeconds
+    Disp->>SRSvc: InvokeCommandAsync(access_key, commandJson, timeout)
+
+    SRSvc->>NLDB: SELECT id FROM devices WHERE access_key=@key
+    NLDB-->>SRSvc: device_id
+
+    alt pending command already exists for device_id
+        SRSvc-->>Disp: InvalidOperationException("already pending")
+        Disp-->>Facade: propagate
+        Facade->>Push: Publish command.status FAILURE<br/>message: "already_pending"
+        Push-->>SSE: event: command.status
+        Facade-->>CE: propagate
+        CE->>Audit: RecordAsync(COMMAND_EXECUTE, FAILURE)
+        Audit->>EF: INSERT controlit_audit_log
+        CE-->>Dashboard: HTTP 409<br/>{ title: "Conflict" }
+    end
+
+    SRSvc->>SRSvc: _pendingCommands[device_id] = TCS<br/>TTL cleanup protects stale entries
+    SRSvc->>SRSvc: Build RootEntity<br/>{ admin_identity.token,<br/>target_device.access_key,<br/>command }
+    SRSvc->>Hub: InvokeAsync("MessageReceivedFromWebconsole", urlEncodedRootEntity)
+    Hub->>Agent: Forward remote shell command
+
+    %% ─────────────────────────────────────────
+    %% 5a. Success
+    %% ─────────────────────────────────────────
+
+    Agent-->>Hub: command output
+    Hub-->>SRSvc: ReceiveClientResponseRemoteShell<br/>"device_id>>nlocksep<<output"
+    SRSvc->>SRSvc: TryRemove(device_id)<br/>TCS.TrySetResult(output)
+    SRSvc-->>Disp: output string
+    Disp-->>Facade: CommandResult { deviceId, output, status: "SUCCESS" }
+    Facade->>Push: Publish command.status SUCCESS<br/>message: "dispatch_succeeded"
+    Push-->>SSE: event: command.status
     Facade-->>CE: CommandResult
-
-    CE-->>Dashboard: HTTP 200 OK<br/>{ output, tenantId }
+    CE->>Audit: RecordAsync(COMMAND_EXECUTE, SUCCESS)
+    Audit->>EF: INSERT controlit_audit_log
+    CE-->>Dashboard: HTTP 200<br/>{ deviceId, output, executedAt, status }
 
     %% ─────────────────────────────────────────
-    %% 5b. Timeout path — no response within TTL
+    %% 5b. Timeout
     %% ─────────────────────────────────────────
 
-    alt Command times out (config.CommandTimeoutSeconds — default 30s)
-        SRSvc->>SRSvc: cts.Token fires<br/>_pendingCommands.TryRemove(device_id)<br/>tcs.TrySetCanceled()
-        SRSvc-->>Disp: throw TimeoutException("Command timed out after Xs")
-        Disp-->>Facade: TimeoutException propagates
-        Facade-->>CE: TimeoutException
-        CE-->>Dashboard: HTTP 504 Gateway Timeout<br/>{ error: "Command timed out after Xs" }
+    alt no response before timeoutSeconds
+        SRSvc->>SRSvc: CancellationToken fires<br/>TryRemove(device_id)<br/>TCS.TrySetCanceled()
+        SRSvc-->>Disp: TimeoutException
+        Disp-->>Facade: propagate
+        Facade->>Push: Publish command.status TIMEOUT<br/>message: "timeout"
+        Push-->>SSE: event: command.status
+        Facade-->>CE: propagate
+        CE->>Audit: RecordAsync(COMMAND_EXECUTE, TIMEOUT)
+        Audit->>EF: INSERT controlit_audit_log
+        CE-->>Dashboard: HTTP 504<br/>{ title: "Command Timeout" }
     end
 
     %% ─────────────────────────────────────────
-    %% 5c. SignalR disconnected path
+    %% 6. Batch path
     %% ─────────────────────────────────────────
 
-    alt SignalR hub not connected at dispatch time
-        SRSvc-->>Disp: throw InvalidOperationException("Not connected to NetLock commandHub")
-        Disp-->>Facade: propagates
-        Facade-->>CE: propagates
-        CE-->>Dashboard: HTTP 503 Service Unavailable<br/>{ error: "SignalR hub not connected" }
+    opt POST /commands/batch
+        Dashboard->>CE: { deviceIds[], command, shell, timeoutSeconds }
+        CE->>CE: Validate unique positive deviceIds<br/>max 25, clamp timeout 5..120
+        loop each deviceId sequentially
+            CE->>Audit: RecordAsync(PENDING)
+            CE->>Facade: ExecuteCommandAsync(single CommandRequest)
+            Facade->>DevRepo: Tenant-scoped device lookup
+            Facade->>Disp: Dispatch via same SignalR path
+            Facade->>Push: command.status PENDING/SUCCESS/TIMEOUT/FAILURE
+            CE->>Audit: RecordAsync(SUCCESS/TIMEOUT/FAILURE)
+        end
+        CE-->>Dashboard: HTTP 200 BatchCommandResponse<br/>{ requestedCount, successCount, failureCount, results[] }
     end
 ```
 
@@ -122,12 +176,15 @@ sequenceDiagram
 
 ## Design Decisions
 
-| Concern | Decision |
+| Concern | Current decision |
 |---|---|
-| API key validation | SHA-256 hash compared against `controlit_tenant_api_keys`. Result cached for 5 minutes per key. |
-| Tenant isolation | `TenantContext.TenantId` derived exclusively from API key lookup in `ApiKeyMiddleware`. Never accepted from request body or query params. |
-| Audit timing | Intent logged before dispatch. Outcome logged after. `RecordAsync` never throws — audit failure does not block command execution. |
-| `_pendingCommands` keying | Keyed by `device_id` (integer PK). NetLock's callback delivers `"device_id>>nlocksep<<output"` — `responseId` is generated internally by NetLock and never returned to ControlIT. One command per device enforced — 409 Conflict if device already has a command in flight. |
-| Command timeout | Server-side only — `NetLock:CommandTimeoutSeconds: 30` in `appsettings.json`. Never accepted from the request body. |
-| Rate limiting | `POST /commands/execute` — fixed window: 20 req/min, queue 0. Exceeded: HTTP 429. |
-| SignalR reconnect | `InfiniteRetryPolicy` with exponential backoff capped at 60–90s. In-flight commands at disconnect time expire via their CTS. |
+| Auth and tenant scope | JWT bearer auth populates `IActorContext`; `TenantContext` derives `TenantId`/`IsAllTenants` from JWT role and claims. |
+| API keys | `ApiKeyMiddleware` is not registered. Old API-key tenant derivation is not current runtime path. |
+| Request identifier | Client sends `deviceId`, not `deviceAccessKey`. Backend reads `access_key` only after tenant-scoped `Device` lookup. |
+| Access-key exposure | Device DTOs, push events, command responses, and audit records do not expose raw NetLock access keys. |
+| Dispatch status push | `ControlItFacade` publishes `command.status` events on pending, success, timeout, offline, already-pending, and unavailable paths. SSE filters by tenant unless subscriber has all-tenant scope. |
+| Pending command key | `NetLockSignalRService` keys `_pendingCommands` by NetLock `device_id` string because callback format is `"device_id>>nlocksep<<output"`. |
+| Batch commands | `/commands/batch` validates max 25 unique device IDs, then executes each item through the same single-command facade path and returns per-device results. |
+| Rate limiting | Commands use authenticated actor/IP partitioned sliding-window limiter, default 20 req/min, no queue. |
+| Audit trail | Endpoint writes `PENDING` before dispatch and terminal `SUCCESS`/`TIMEOUT`/`FAILURE` after each command item. |
+| Secrets | NetLock admin token and device access keys stay backend-side and are never logged or returned. |
