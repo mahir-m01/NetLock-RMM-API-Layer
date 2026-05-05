@@ -1,12 +1,48 @@
-# ControlIT
+<p align="center">
+  <img src="src/ControlIT.Web/public/logo.png" alt="ControlIT logo" width="96" height="96">
+</p>
 
-ControlIT is an operational control layer for NetLock RMM. It adds a focused web dashboard, tenant-aware access control, live device status, command execution, batch command dispatch, NetBird network visibility, setup-key management, audit logging, and system health checks.
+<h1 align="center">ControlIT</h1>
 
-ControlIT is designed to sit beside an existing NetLock deployment. NetLock remains the endpoint-management system of record. ControlIT does not install NetLock, does not modify NetLock source, and does not write to NetLock-owned tables.
+<p align="center">
+  NetLock RMM API layer and operations dashboard by <strong>Computer Port</strong>.
+</p>
 
-## Features
+<p align="center">
+  <a href="https://github.com/mahir-m01/NetLock-RMM-API-Layer/releases/latest">Latest release</a>
+  ·
+  <a href="PACKAGE.md">Release package</a>
+  ·
+  <a href="RELEASE.md">Operations guide</a>
+  ·
+  <a href="CHANGELOG.md">Changelog</a>
+</p>
 
-- Web dashboard for operators and administrators.
+---
+
+## About
+
+ControlIT is an alpha operations layer for existing NetLock RMM deployments. It adds a focused web dashboard, tenant-aware access control, live device status, command execution, batch command dispatch, NetBird network visibility, setup-key management, audit logging, and system health checks.
+
+ControlIT sits beside NetLock. NetLock remains the endpoint-management system of record. ControlIT does not install NetLock, does not modify NetLock source, and does not write to NetLock-owned tables. ControlIT writes only its own `controlit_*` tables.
+
+## Alpha Release
+
+| Item | Status |
+|---|---|
+| Release channel | `production` branch |
+| Current version | `v0.1.0-alpha.1` |
+| Package type | Docker Compose source package |
+| Runtime | `controlit-api` + `controlit-web` |
+| Dependency | Existing healthy NetLock RMM installation |
+| Network integration | NetBird Cloud or self-hosted NetBird Management API |
+| Update model | Host-level OTA scripts for the Compose deployment |
+
+This release is suitable for controlled alpha demos and internal validation. It is not yet positioned as a final production-ready RMM platform.
+
+## Core Features
+
+- Operator dashboard for endpoint and tenant operations.
 - Live dashboard updates through server-sent events.
 - Device inventory sourced from NetLock.
 - Online/offline state sourced from NetLock live connection state.
@@ -15,11 +51,10 @@ ControlIT is designed to sit beside an existing NetLock deployment. NetLock rema
 - NetBird Cloud or self-hosted NetBird Management API support.
 - Existing NetBird group binding for customer-owned networks.
 - ControlIT-managed NetBird tenant group/setup-key flow for new deployments.
-- One-time setup-key reveal. Key lists remain redacted.
+- One-time setup-key reveal. Key lists stay redacted.
 - Audit log for administrative actions.
 - Health endpoints for API, MySQL, NetLock SignalR, and NetBird.
 - Least-privilege runtime database user.
-- ControlIT-owned database writes limited to `controlit_*` tables.
 
 ## Deployment Requirements
 
@@ -30,30 +65,25 @@ ControlIT is designed to sit beside an existing NetLock deployment. NetLock rema
 - NetBird personal access token with management API access.
 - DNS/TLS/reverse proxy configuration when exposing ControlIT outside a private network.
 
-ControlIT setup expects NetLock to be installed, configured, healthy, and reachable before ControlIT starts. ControlIT does not ask operators to query NetLock MySQL manually on standard Docker installs. The installer reads NetLock's existing environment, discovers the Docker network, reads the NetLock token/key needed by ControlIT, creates a dedicated least-privilege `controlit_api` database user, and then runs ControlIT with that restricted user.
+ControlIT setup expects NetLock to be installed, configured, healthy, and reachable before ControlIT starts. On standard same-host Docker installs, the installer discovers NetLock values automatically. Operators should not need to query NetLock MySQL manually.
 
-## Install
+## Quick Install
 
-1. Clone release branch beside the existing NetLock installation:
+Clone the release branch beside the existing NetLock installation:
 
 ```bash
 cd /opt
-git clone -b production https://github.com/mahir-m01/NetLock-RMM-API-Layer.git
-mv NetLock-RMM-API-Layer controlit
+git clone -b production https://github.com/mahir-m01/NetLock-RMM-API-Layer.git controlit
 cd controlit
 ```
 
-If NetLock is installed somewhere else, use the same parent directory and keep ControlIT in its own `controlit` folder. Do not place ControlIT files over the NetLock compose file or NetLock `.env`.
-
-2. Generate ControlIT environment and bootstrap credentials:
+Generate environment and bootstrap credentials:
 
 ```bash
 ./scripts/setup-controlit-env.sh
 ```
 
-The script creates `.env`, generates ControlIT signing/database/bootstrap secrets, and prints initial SuperAdmin credentials once.
-
-3. Fill NetBird and browser-facing values in `.env`:
+Set browser-facing and NetBird values in `.env`:
 
 ```bash
 CONTROLIT_PUBLIC_API_URL=https://api.<your-domain>
@@ -62,9 +92,19 @@ NETBIRD_BASE_URL=https://api.netbird.io
 NETBIRD_TOKEN=<NetBird personal access token>
 ```
 
-For self-hosted NetBird, set `NETBIRD_BASE_URL` to the management API URL.
+Install ControlIT:
 
-Standard same-host NetLock Docker values are detected automatically during install:
+```bash
+./scripts/install-controlit.sh
+```
+
+The installer applies ControlIT migrations, creates the least-privilege runtime DB user, starts API/web containers, and waits for `/health/ready`.
+
+Open the dashboard at the configured web origin and login with the bootstrap SuperAdmin credentials printed by `setup-controlit-env.sh`. Change the bootstrap password after first login.
+
+## Standard NetLock Discovery
+
+For standard same-host NetLock Docker installs, ControlIT discovers:
 
 - NetLock MySQL root password from the existing NetLock `.env`.
 - NetLock database and MySQL container.
@@ -73,29 +113,13 @@ Standard same-host NetLock Docker values are detected automatically during insta
 - NetLock `remote_session_token`.
 - NetLock `files_api_key`.
 
-Manual override is still supported for custom deployments:
+For custom installs:
 
 ```bash
 CONTROLIT_NETLOCK_ENV_FILE=/path/to/netlock/.env ./scripts/install-controlit.sh
 ```
 
 or edit the NetLock values directly in `.env`.
-
-4. Confirm NetLock services are healthy:
-
-```bash
-docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-```
-
-5. Install ControlIT:
-
-```bash
-./scripts/install-controlit.sh
-```
-
-The install script applies ControlIT migrations, creates the least-privilege runtime DB user, starts API/web containers, and waits for `/health/ready`.
-
-Open the dashboard at the configured web origin and login with the bootstrap SuperAdmin credentials. Change the bootstrap password after first login.
 
 ## NetBird Setup
 
@@ -105,7 +129,7 @@ Use existing NetBird network:
 2. Login as SuperAdmin or CpAdmin.
 3. Open Network.
 4. Select tenant.
-5. Bind the tenant to an existing NetBird group using `external` or `read_only` mode.
+5. Bind tenant to an existing NetBird group using `external` or `read_only` mode.
 
 Create ControlIT-managed NetBird path:
 
@@ -117,8 +141,6 @@ Create ControlIT-managed NetBird path:
 6. Install NetBird agent on endpoint with that tenant key.
 7. Link NetBird peer to NetLock device in ControlIT.
 
-Modes:
-
 | Mode | Purpose |
 |---|---|
 | `external` | Customer-owned NetBird group. ControlIT reads and maps peers. |
@@ -129,8 +151,8 @@ Modes:
 
 Each managed endpoint needs both agents:
 
-1. NetLock agent from the tenant installer generated by NetLock.
-2. NetBird agent enrolled with the tenant setup key.
+1. NetLock agent from tenant installer generated by NetLock.
+2. NetBird agent enrolled with tenant setup key.
 
 Linux NetBird enrollment:
 
@@ -143,7 +165,7 @@ NetLock installer command must come from the NetLock console so tenant and serve
 
 ## Updates
 
-Current update model: host-level OTA for the ControlIT Compose deployment. API and web containers restart during the update. Database data remains in the existing NetLock MySQL database. ControlIT schema changes are applied through EF migrations before runtime containers are replaced.
+Current update model: host-level OTA for the ControlIT Compose deployment. API and web containers restart during update. Database data remains in existing NetLock MySQL. ControlIT schema changes are applied through EF migrations before runtime containers are replaced.
 
 Check for update:
 
@@ -151,13 +173,11 @@ Check for update:
 ./scripts/check-controlit-update.sh
 ```
 
-Update sequence:
+Update:
 
 ```bash
 ./scripts/update-controlit.sh
 ```
-
-The update script backs up `.env`, fast-forwards the `production` branch, applies ControlIT migrations, refreshes least-privilege grants, rebuilds containers, and waits for `/health/ready`.
 
 Enable scheduled OTA updates on Linux/systemd hosts:
 
@@ -165,13 +185,7 @@ Enable scheduled OTA updates on Linux/systemd hosts:
 ./scripts/install-controlit-ota.sh
 ```
 
-Default schedule: daily around 03:30 with randomized delay. Override with:
-
-```bash
-CONTROLIT_OTA_ON_CALENDAR="*-*-* 02:00:00" ./scripts/install-controlit-ota.sh
-```
-
-Rollback sequence:
+Rollback:
 
 ```bash
 git log --oneline -5
@@ -179,8 +193,6 @@ git checkout <previous-production-commit>
 docker compose up -d --build
 curl -f http://localhost:5290/health/ready
 ```
-
-Database migrations should stay additive and backward-compatible for smooth updates. Destructive migrations require a backup and a planned maintenance window.
 
 ## Operations
 
@@ -216,6 +228,8 @@ docker compose down
 - ControlIT writes only `controlit_*` tables.
 - NetLock bootstrap/vendor configuration files are external prerequisites, not ControlIT-owned secrets.
 
-## Release Notes
+## More
 
-See [RELEASE.md](RELEASE.md) for environment reference, token rotation, update policy, and operational checklist.
+- [Release package](PACKAGE.md)
+- [Release guide](RELEASE.md)
+- [Changelog](CHANGELOG.md)
