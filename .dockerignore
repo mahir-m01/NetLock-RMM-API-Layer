@@ -45,7 +45,6 @@ data/
 .env
 .env.*
 !.env.example
-src/ControlIT.Api/Properties/launchSettings.json
 src/ControlIT.Web/.env*
 
 # IDE and OS files
