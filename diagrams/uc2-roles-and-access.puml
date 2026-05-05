@@ -1,0 +1,74 @@
+@startuml uc2-roles-and-access
+title UC2 - Roles, Tenant Scope, Access Control
+left to right direction
+skinparam monochrome true
+skinparam shadowing false
+skinparam backgroundColor white
+skinparam packageStyle rectangle
+
+actor "SuperAdmin" as SuperAdmin
+actor "CpAdmin" as CpAdmin
+actor "ClientAdmin" as ClientAdmin
+actor "Technician" as Technician
+actor "Threat Actor\nstolen token/cookie" as Threat
+
+rectangle "Identity and Session" {
+  usecase "Login" as Login
+  usecase "Refresh token\nrotation" as Refresh
+  usecase "Logout" as Logout
+  usecase "Change password" as ChangePassword
+  usecase "Reset password" as ResetPassword
+}
+
+rectangle "Authorization Controls" {
+  usecase "Validate JWT" as Jwt
+  usecase "Resolve actor\nfrom claims" as Actor
+  usecase "Apply tenant scope" as TenantScope
+  usecase "Require targetTenantId\nfor elevated NetBird ops" as TargetTenant
+  usecase "Block equal-or-higher\nrole management" as RoleCeiling
+  usecase "Partition rate limits\nby actor/IP" as RateLimit
+}
+
+rectangle "Protected Operations" {
+  usecase "Manage users" as ManageUsers
+  usecase "Read tenant data" as ReadTenant
+  usecase "Execute commands" as Commands
+  usecase "Manage NetBird tenant\nnetwork" as NetBirdOps
+  usecase "Read audit logs" as Audit
+}
+
+SuperAdmin --> Login
+CpAdmin --> Login
+ClientAdmin --> Login
+Technician --> Login
+
+SuperAdmin --> ManageUsers
+CpAdmin --> ManageUsers
+SuperAdmin --> NetBirdOps
+CpAdmin --> NetBirdOps
+ClientAdmin --> NetBirdOps
+Technician --> Commands
+CpAdmin --> Commands
+ClientAdmin --> ReadTenant
+SuperAdmin --> Audit
+CpAdmin --> Audit
+
+Login ..> Jwt : issues
+Refresh ..> Jwt : renews
+Logout ..> Refresh : revokes
+ChangePassword ..> Refresh : revokes all
+ResetPassword ..> Refresh : revokes all
+
+ManageUsers ..> RoleCeiling : includes
+ReadTenant ..> TenantScope : includes
+Commands ..> TenantScope : includes
+NetBirdOps ..> TargetTenant : includes
+NetBirdOps ..> TenantScope : includes
+Audit ..> TenantScope : includes
+
+Jwt --> Actor
+Actor --> TenantScope
+Threat --> RateLimit
+RateLimit ..> Login : protects
+RateLimit ..> Commands : protects
+@enduml

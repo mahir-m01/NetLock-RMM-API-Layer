@@ -1,0 +1,59 @@
+@startuml uc3-netbird-operations
+title UC3 - NetBird Operations
+left to right direction
+skinparam monochrome true
+skinparam shadowing false
+skinparam backgroundColor white
+skinparam packageStyle rectangle
+
+actor "SuperAdmin/CpAdmin" as Admin
+actor "ClientAdmin" as ClientAdmin
+actor "Technician" as Technician
+actor "Managed Device" as Device
+actor "NetBird API" as NetBird
+actor "NetLock Device Inventory" as NetLock
+
+rectangle "ControlIT Network Page" {
+  usecase "Select target tenant" as SelectTenant
+  usecase "Bind existing group\nexternal/read_only" as BindGroup
+  usecase "Create managed tenant group\nwhen needed" as ManagedGroup
+  usecase "Create setup key\nraw key once" as CreateKey
+  usecase "List setup keys\nredacted" as ListKeys
+  usecase "Install NetBird agent\nwith setup key" as InstallAgent
+  usecase "List peers" as ListPeers
+  usecase "Link peer to\nControlIT device" as LinkPeer
+  usecase "Show NetBird IP\non dashboard/devices" as ShowIp
+  usecase "View network summary" as Summary
+}
+
+Admin --> SelectTenant
+Admin --> BindGroup
+Admin --> CreateKey
+Admin --> ListKeys
+Admin --> ListPeers
+Admin --> LinkPeer
+Admin --> Summary
+
+ClientAdmin --> CreateKey
+ClientAdmin --> ListKeys
+ClientAdmin --> ListPeers
+ClientAdmin --> Summary
+Technician --> Summary
+Device --> InstallAgent
+
+CreateKey ..> ManagedGroup : includes when no group exists
+CreateKey ..> ListKeys : later view redacts
+InstallAgent ..> CreateKey : uses setup key
+LinkPeer ..> ListPeers : includes
+ShowIp ..> LinkPeer : requires mapping
+
+BindGroup --> NetBird
+ManagedGroup --> NetBird
+CreateKey --> NetBird
+ListKeys --> NetBird
+InstallAgent --> NetBird
+ListPeers --> NetBird
+Summary --> NetBird
+LinkPeer --> NetLock
+ShowIp --> NetLock
+@enduml
