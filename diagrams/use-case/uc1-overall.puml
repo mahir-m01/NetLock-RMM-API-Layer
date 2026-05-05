@@ -1,10 +1,21 @@
 @startuml uc1-overall
 title UC1 - ControlIT Overall Platform
 left to right direction
-skinparam monochrome true
 skinparam shadowing false
 skinparam backgroundColor white
 skinparam packageStyle rectangle
+skinparam ArrowColor #334155
+skinparam ActorBorderColor #334155
+skinparam ActorBackgroundColor #E2E8F0
+skinparam ActorFontColor #0F172A
+skinparam UsecaseBorderColor #1D4ED8
+skinparam UsecaseBackgroundColor #DBEAFE
+skinparam UsecaseFontColor #0F172A
+skinparam RectangleBorderColor #0F172A
+skinparam RectangleBackgroundColor #F8FAFC
+skinparam NoteBorderColor #92400E
+skinparam NoteBackgroundColor #FEF3C7
+skinparam NoteFontColor #111827
 
 actor "SuperAdmin" as SuperAdmin
 actor "CpAdmin" as CpAdmin
@@ -14,7 +25,7 @@ actor "Managed Device" as Device
 actor "NetLock RMM\npre-existing" as NetLock
 actor "NetBird\nManagement API" as NetBird
 
-rectangle "ControlIT Alpha" {
+rectangle "ControlIT Alpha" #F8FAFC {
   usecase "Authenticate\nand manage session" as Auth
   usecase "Manage users\nwith role ceiling" as Users
   usecase "View dashboard\nand devices" as Dashboard

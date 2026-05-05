@@ -3,7 +3,8 @@
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Admin as Admin/User
+    actor Admin as SuperAdmin/CpAdmin
+    actor TenantMember as Tenant member
     participant Web as Network Page
     participant API as NetworkEndpoints
     participant Resolver as TenantTargetResolver
@@ -46,7 +47,7 @@ sequenceDiagram
         API-->>Web: Raw key once
     end
 
-    Admin->>Web: List setup keys
+    TenantMember->>Web: List setup keys
     Web->>API: GET /network/setup-keys
     API->>NetBird: List setup keys
     API-->>Web: Keys with key="[redacted]"

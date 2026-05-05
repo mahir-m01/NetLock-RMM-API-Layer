@@ -1,10 +1,18 @@
 @startuml uc3-netbird-operations
 title UC3 - NetBird Operations
 left to right direction
-skinparam monochrome true
 skinparam shadowing false
 skinparam backgroundColor white
 skinparam packageStyle rectangle
+skinparam ArrowColor #334155
+skinparam ActorBorderColor #334155
+skinparam ActorBackgroundColor #E2E8F0
+skinparam ActorFontColor #0F172A
+skinparam UsecaseBorderColor #0F766E
+skinparam UsecaseBackgroundColor #CCFBF1
+skinparam UsecaseFontColor #0F172A
+skinparam RectangleBorderColor #0F172A
+skinparam RectangleBackgroundColor #F8FAFC
 
 actor "SuperAdmin/CpAdmin" as Admin
 actor "ClientAdmin" as ClientAdmin
@@ -13,7 +21,7 @@ actor "Managed Device" as Device
 actor "NetBird API" as NetBird
 actor "NetLock Device Inventory" as NetLock
 
-rectangle "ControlIT Network Page" {
+rectangle "ControlIT Network Page" #F0FDFA {
   usecase "Select target tenant" as SelectTenant
   usecase "Bind existing group\nexternal/read_only" as BindGroup
   usecase "Create managed tenant group\nwhen needed" as ManagedGroup
@@ -34,7 +42,6 @@ Admin --> ListPeers
 Admin --> LinkPeer
 Admin --> Summary
 
-ClientAdmin --> CreateKey
 ClientAdmin --> ListKeys
 ClientAdmin --> ListPeers
 ClientAdmin --> Summary
