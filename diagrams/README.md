@@ -1,36 +1,43 @@
-# ControlIT - UML Diagrams
+# ControlIT UML Diagrams
 
-Diagrams describe current alpha app state. Markdown diagrams render in GitHub with Mermaid. PlantUML sources are kept for PNG regeneration, but this update intentionally does not touch PNG files.
+Current alpha architecture diagrams.
+
+Rules:
+- Use case diagrams use PlantUML (`.puml`) plus generated PNGs because Mermaid does not support use case diagrams well.
+- Class, ER, and sequence diagrams use Mermaid inside Markdown so they render on GitHub.
+- NetLock is a pre-existing dependency. ControlIT reads/calls NetLock; it does not edit NetLock source or own NetLock tables.
+- NetBird is represented as an external Management API. No NetBird source/database ownership is implied.
 
 ## Use Case Diagrams
 
-| Diagram | File | Description |
-|---------|------|-------------|
-| UC1 - Overall System | [uc1-overall.md](uc1-overall.md) | Actors and use cases across current alpha platform |
-| UC2 - API Layer | [uc2-api-layer.md](uc2-api-layer.md) | REST API layer, JWT auth, tenant scoping, frontend-facing endpoints, external boundaries |
-| UC2 - API Layer (PlantUML) | [uc2-api-layer.puml](uc2-api-layer.puml) | PlantUML source for same API-layer model |
+| Diagram | Source | PNG | Purpose |
+|---|---|---|---|
+| UC1 - Overall Platform | [uc1-overall.puml](uc1-overall.puml) | [uc1-overall.png](uc1-overall.png) | README/showcase diagram: actors, main product capabilities, external systems |
+| UC2 - Roles and Access | [uc2-roles-and-access.puml](uc2-roles-and-access.puml) | [uc2-roles-and-access.png](uc2-roles-and-access.png) | RBAC, tenant isolation, role ceiling, elevated tenant targeting |
+| UC3 - NetBird Operations | [uc3-netbird-operations.puml](uc3-netbird-operations.puml) | [uc3-netbird-operations.png](uc3-netbird-operations.png) | NetBird group binding, setup keys, peer enrollment/linking |
 
 ## Class Diagrams
 
-| Diagram | File | Description |
-|---------|------|-------------|
-| Class Diagram 01 - Runtime/Data Architecture | [class-01-netlockrmm.md](class-01-netlockrmm.md) | Current API runtime, repositories, NetLock/NetBird adapters, push hub, command dispatch |
-| Class Diagram 02 - Auth/API Alpha | [class-02-auth.puml](class-02-auth.puml) | Current auth, JWT, RBAC, tenant target resolution, NetBird, dashboard push, command services |
+| Diagram | File | Purpose |
+|---|---|---|
+| Class 01 - Overall Architecture | [class-01-overall.md](class-01-overall.md) | High-level ControlIT modules and external boundaries |
+| Class 02 - API Services | [class-02-api-services.md](class-02-api-services.md) | Auth, RBAC, tenant resolution, repositories, command services |
+| Class 03 - Integrations | [class-03-integrations.md](class-03-integrations.md) | NetLock, NetBird, push hub, live bridge adapters |
 
 ## ER Diagrams
 
-| Diagram | File | Description |
-|---------|------|-------------|
-| ER Diagram 01 - Data Boundary | [er-01-netlockrmm.md](er-01-netlockrmm.md) | NetLock read-only tables, ControlIT-owned `controlit_*` tables, external NetBird resources |
-| ER Diagram 02 - Auth/API Alpha | [er-02-auth.puml](er-02-auth.puml) | Current ControlIT-owned tables plus read-only NetLock references |
+| Diagram | File | Purpose |
+|---|---|---|
+| ER 01 - Overall Data Boundary | [er-01-overall.md](er-01-overall.md) | High-level data ownership map |
+| ER 02 - ControlIT Owned Tables | [er-02-controlit-owned.md](er-02-controlit-owned.md) | EF Core `controlit_*` schema |
+| ER 03 - External Read/API Boundary | [er-03-external-boundary.md](er-03-external-boundary.md) | NetLock read-only tables and NetBird external resources |
 
 ## Sequence Diagrams
 
-| Diagram | File | Description |
-|---------|------|-------------|
-| SEQ1 - Execute Command | [seq-01-execute-command.md](seq-01-execute-command.md) | JWT-authenticated single and batch command flow through tenant-scoped device lookup, NetLock SignalR, audit, and SSE status events |
-| SEQ2 - Dashboard Push Stream | [seq-02-dashboard-push.md](seq-02-dashboard-push.md) | SSE dashboard stream, `NetLockLiveBridge`, `PushEventHub`, tenant filtering, degraded/offline states |
-| SEQ3 - NetBird Tenant Onboarding | [seq-03-netbird-tenant-onboarding.md](seq-03-netbird-tenant-onboarding.md) | `targetTenantId` resolution, tenant group binding, setup-key reveal/redaction, peer enrollment/linking, NetBird API boundary |
-| SEQ4 - Login | [seq-04-login.puml](seq-04-login.puml) | `POST /auth/login`: lockout, JWT issue, refresh cookie creation |
-| SEQ5 - Refresh Rotation | [seq-05-refresh-rotation.puml](seq-05-refresh-rotation.puml) | `POST /auth/refresh`: hash lookup, rotation, replay revocation |
-| SEQ6 - Password Change | [seq-06-password-change.puml](seq-06-password-change.puml) | `POST /auth/change-password`: current password check, policy, all-refresh-token revocation |
+| Diagram | File | Purpose |
+|---|---|---|
+| SEQ0 - MVP Runtime Flow | [seq-00-mvp-runtime.md](seq-00-mvp-runtime.md) | End-to-end dashboard/device/network flow |
+| SEQ1 - Command Execution | [seq-01-command-execution.md](seq-01-command-execution.md) | Single and batch commands through NetLock SignalR |
+| SEQ2 - Dashboard Push | [seq-02-dashboard-push.md](seq-02-dashboard-push.md) | SSE stream, push hub, live bridge, no polling fallback |
+| SEQ3 - NetBird Onboarding | [seq-03-netbird-onboarding.md](seq-03-netbird-onboarding.md) | Tenant group, setup key, peer enrollment/link |
+| SEQ4 - Auth Session | [seq-04-auth-session.md](seq-04-auth-session.md) | Login, refresh rotation, password change/reset |

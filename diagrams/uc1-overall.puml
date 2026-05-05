@@ -1,0 +1,75 @@
+@startuml uc1-overall
+title UC1 - ControlIT Overall Platform
+left to right direction
+skinparam monochrome true
+skinparam shadowing false
+skinparam backgroundColor white
+skinparam packageStyle rectangle
+
+actor "SuperAdmin" as SuperAdmin
+actor "CpAdmin" as CpAdmin
+actor "ClientAdmin" as ClientAdmin
+actor "Technician" as Technician
+actor "Managed Device" as Device
+actor "NetLock RMM\npre-existing" as NetLock
+actor "NetBird\nManagement API" as NetBird
+
+rectangle "ControlIT Alpha" {
+  usecase "Authenticate\nand manage session" as Auth
+  usecase "Manage users\nwith role ceiling" as Users
+  usecase "View dashboard\nand devices" as Dashboard
+  usecase "Receive live push\nstatus" as Push
+  usecase "Run single command" as Command
+  usecase "Run batch command" as Batch
+  usecase "View events\nand audit logs" as Audit
+  usecase "Manage NetBird\nnetwork" as Network
+  usecase "Create setup key\none-time reveal" as SetupKey
+  usecase "Link NetBird peer\nto device" as LinkPeer
+  usecase "View system health" as Health
+}
+
+SuperAdmin --> Auth
+SuperAdmin --> Users
+SuperAdmin --> Dashboard
+SuperAdmin --> Audit
+SuperAdmin --> Network
+SuperAdmin --> Health
+
+CpAdmin --> Auth
+CpAdmin --> Users
+CpAdmin --> Dashboard
+CpAdmin --> Network
+CpAdmin --> Command
+CpAdmin --> Batch
+
+ClientAdmin --> Auth
+ClientAdmin --> Dashboard
+ClientAdmin --> Network
+ClientAdmin --> Audit
+
+Technician --> Auth
+Technician --> Dashboard
+Technician --> Command
+Technician --> Batch
+
+Device --> Push
+Dashboard --> Push
+Command --> NetLock
+Batch --> NetLock
+Dashboard --> NetLock
+Health --> NetLock
+Network --> NetBird
+SetupKey --> NetBird
+LinkPeer --> NetBird
+
+Network ..> SetupKey : includes
+Network ..> LinkPeer : includes
+Command ..> Push : publishes status
+Batch ..> Push : publishes status
+
+note bottom of NetLock
+  ControlIT reads/calls NetLock.
+  No NetLock source edits.
+  No writes to NetLock-owned tables.
+end note
+@enduml
