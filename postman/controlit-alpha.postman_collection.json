@@ -1,0 +1,424 @@
+{
+  "info": {
+    "_postman_id": "28b2cf56-187b-44c6-9b06-f19e2a6e1c76",
+    "name": "ControlIT Alpha API",
+    "description": "Local ControlIT alpha API collection. Import with the ControlIT Local environment, run Auth / Login first, then use the stored bearer token.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('login ok', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "const token = body.accessToken || body.access_token || body.token;",
+                  "if (token) pm.environment.set('access_token', token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": "{{base_url}}/auth/login"
+          }
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/auth/me"
+          }
+        },
+        {
+          "name": "Refresh",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "url": "{{base_url}}/auth/refresh"
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/auth/logout"
+          }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"{{password}}\",\n  \"newPassword\": \"REPLACE_WITH_NEW_PASSWORD\"\n}"
+            },
+            "url": "{{base_url}}/auth/change-password"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "url": "{{base_url}}/health"
+          }
+        },
+        {
+          "name": "Ready",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "url": "{{base_url}}/health/ready"
+          }
+        },
+        {
+          "name": "Live",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "url": "{{base_url}}/health/live"
+          }
+        },
+        {
+          "name": "System Health",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/admin/system-health"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "item": [
+        {
+          "name": "Dashboard Snapshot",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/dashboard"
+          }
+        },
+        {
+          "name": "Dashboard Stream",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/dashboard/stream"
+          }
+        },
+        {
+          "name": "Sync Stream",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/sync/stream"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Devices",
+      "item": [
+        {
+          "name": "List Devices",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/devices?page=1&pageSize=25"
+          }
+        },
+        {
+          "name": "List Linux Devices",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/devices?page=1&pageSize=25&platform=Linux"
+          }
+        },
+        {
+          "name": "Device Detail",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/devices/{{device_id}}"
+          }
+        },
+        {
+          "name": "Device Metrics",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/devices/metrics"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Commands",
+      "item": [
+        {
+          "name": "Execute Command",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deviceId\": {{device_id}},\n  \"command\": \"{{command}}\",\n  \"shell\": \"bash\",\n  \"timeoutSeconds\": 30\n}"
+            },
+            "url": "{{base_url}}/commands/execute"
+          }
+        },
+        {
+          "name": "Batch Command",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deviceIds\": [{{device_id}}],\n  \"command\": \"{{command}}\",\n  \"shell\": \"bash\",\n  \"timeoutSeconds\": 30\n}"
+            },
+            "url": "{{base_url}}/commands/batch"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tenants and Users",
+      "item": [
+        {
+          "name": "List Tenants",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/tenants"
+          }
+        },
+        {
+          "name": "Tenant Detail",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/tenants/{{tenant_id}}"
+          }
+        },
+        {
+          "name": "Tenant Locations",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/tenants/{{tenant_id}}/locations"
+          }
+        },
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/users"
+          }
+        },
+        {
+          "name": "Create User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"new.user@example.local\",\n  \"role\": \"Technician\",\n  \"tenantId\": {{tenant_id}},\n  \"assignedClients\": [{{tenant_id}}]\n}"
+            },
+            "url": "{{base_url}}/users"
+          }
+        },
+        {
+          "name": "Patch User",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isActive\": true\n}"
+            },
+            "url": "{{base_url}}/users/{{user_id}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Events and Audit",
+      "item": [
+        {
+          "name": "Events",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/events?page=1&pageSize=25"
+          }
+        },
+        {
+          "name": "Audit Logs",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/audit/logs?page=1&pageSize=25"
+          }
+        }
+      ]
+    },
+    {
+      "name": "NetBird",
+      "item": [
+        {
+          "name": "Groups",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/network/groups"
+          }
+        },
+        {
+          "name": "Bind Tenant Group",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"groupId\": \"{{netbird_group_id}}\",\n  \"mode\": \"external\"\n}"
+            },
+            "url": "{{base_url}}/network/tenant-group?targetTenantId={{tenant_id}}"
+          }
+        },
+        {
+          "name": "Peers",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/network/peers?targetTenantId={{tenant_id}}"
+          }
+        },
+        {
+          "name": "Network Summary",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/network/summary?targetTenantId={{tenant_id}}"
+          }
+        },
+        {
+          "name": "Setup Keys",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/network/setup-keys?targetTenantId={{tenant_id}}"
+          }
+        },
+        {
+          "name": "Create Setup Key",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"alpha-device-key\",\n  \"type\": \"reusable\",\n  \"expiresInDays\": 7,\n  \"usageLimit\": 0,\n  \"ephemeral\": false\n}"
+            },
+            "url": "{{base_url}}/network/setup-keys?targetTenantId={{tenant_id}}"
+          }
+        },
+        {
+          "name": "Link Peer to Device",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deviceId\": {{device_id}}\n}"
+            },
+            "url": "{{base_url}}/network/peers/{{peer_id}}/link?targetTenantId={{tenant_id}}"
+          }
+        },
+        {
+          "name": "Routes",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/network/routes"
+          }
+        },
+        {
+          "name": "Policies",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/network/policies"
+          }
+        }
+      ]
+    }
+  ]
+}
