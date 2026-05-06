@@ -48,11 +48,17 @@ ClientAdmin --> Summary
 Technician --> Summary
 Device --> InstallAgent
 
-CreateKey ..> ManagedGroup : includes when no group exists
-CreateKey ..> ListKeys : later view redacts
-InstallAgent ..> CreateKey : uses setup key
-LinkPeer ..> ListPeers : includes
-ShowIp ..> LinkPeer : requires mapping
+BindGroup ..> SelectTenant : <<include>>
+CreateKey ..> SelectTenant : <<include>>
+ListKeys ..> SelectTenant : <<include>>
+ListPeers ..> SelectTenant : <<include>>
+LinkPeer ..> SelectTenant : <<include>>
+Summary ..> SelectTenant : <<include>>
+ManagedGroup ..> CreateKey : <<extend>> no group exists
+InstallAgent ..> CreateKey : <<include>> setup key
+LinkPeer ..> ListPeers : <<include>>
+ShowIp ..> LinkPeer : <<extend>> after mapping
+ListKeys ..> CreateKey : <<extend>> redacted after create
 
 BindGroup --> NetBird
 ManagedGroup --> NetBird
