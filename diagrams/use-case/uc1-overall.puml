@@ -73,10 +73,19 @@ Network --> NetBird
 SetupKey --> NetBird
 LinkPeer --> NetBird
 
-Network ..> SetupKey : includes
-Network ..> LinkPeer : includes
-Command ..> Push : publishes status
-Batch ..> Push : publishes status
+Users ..> Auth : <<include>>
+Dashboard ..> Auth : <<include>>
+Command ..> Auth : <<include>>
+Batch ..> Auth : <<include>>
+Audit ..> Auth : <<include>>
+Network ..> Auth : <<include>>
+Health ..> Auth : <<include>>
+
+Dashboard ..> Push : <<include>>
+SetupKey ..> Network : <<extend>>
+LinkPeer ..> Network : <<extend>>
+Push ..> Command : <<extend>> status event
+Push ..> Batch : <<extend>> status event
 
 note bottom of NetLock
   ControlIT reads/calls NetLock.

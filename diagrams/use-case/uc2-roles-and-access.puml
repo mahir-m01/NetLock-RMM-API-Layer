@@ -67,16 +67,31 @@ Logout ..> Refresh : revokes
 ChangePassword ..> Refresh : revokes all
 ResetPassword ..> Refresh : revokes all
 
-ManageUsers ..> RoleCeiling : includes
-ReadTenant ..> TenantScope : includes
-Commands ..> TenantScope : includes
-NetBirdOps ..> TargetTenant : includes
-NetBirdOps ..> TenantScope : includes
-Audit ..> TenantScope : includes
+Refresh ..> Login : <<extend>>
+Logout ..> Login : <<extend>>
+ChangePassword ..> Login : <<extend>>
+ResetPassword ..> Login : <<extend>>
+
+ManageUsers ..> Jwt : <<include>>
+ManageUsers ..> Actor : <<include>>
+ManageUsers ..> RoleCeiling : <<include>>
+ReadTenant ..> Jwt : <<include>>
+ReadTenant ..> Actor : <<include>>
+ReadTenant ..> TenantScope : <<include>>
+Commands ..> Jwt : <<include>>
+Commands ..> Actor : <<include>>
+Commands ..> TenantScope : <<include>>
+NetBirdOps ..> Jwt : <<include>>
+NetBirdOps ..> Actor : <<include>>
+NetBirdOps ..> TenantScope : <<include>>
+Audit ..> Jwt : <<include>>
+Audit ..> Actor : <<include>>
+Audit ..> TenantScope : <<include>>
+TargetTenant ..> NetBirdOps : <<extend>> elevated roles
 
 Jwt --> Actor
 Actor --> TenantScope
 Threat --> RateLimit
-RateLimit ..> Login : protects
-RateLimit ..> Commands : protects
+Login ..> RateLimit : <<include>>
+Commands ..> RateLimit : <<include>>
 @enduml

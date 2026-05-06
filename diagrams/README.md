@@ -4,6 +4,7 @@ Current alpha architecture diagrams.
 
 Rules:
 - Use case diagrams use PlantUML (`.puml`) plus generated PNGs because Mermaid does not support use case diagrams well.
+- Use case diagrams use `<<include>>` for mandatory subflows and `<<extend>>` for optional/conditional behavior.
 - Class, ER, and sequence diagrams use Mermaid inside Markdown so they render on GitHub.
 - NetLock is a pre-existing dependency. ControlIT reads/calls NetLock; it does not edit NetLock source or own NetLock tables.
 - NetBird is represented as an external Management API. No NetBird source/database ownership is implied.
